@@ -82,11 +82,11 @@ class TaskHandler:
                 _submit_task(task)
             except DependencyNotMetException as e:
                 print(e)
-                print("Stopping execution!")
+                print("Stopping execution bc of missing dependency!")
                 exit(1)
             except ProductNotProducedException as e:
                 print(e)
-                print("Stopping execution!")
+                print("Stopping execution bc of not produced product!")
                 exit(1)
 
 

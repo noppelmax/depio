@@ -1,5 +1,8 @@
 from __future__ import annotations
+
+from os.path import getmtime
 from typing import List, Callable, get_origin, Annotated, get_args
+import os
 
 class Product():
     pass
@@ -8,6 +11,9 @@ class Dependency():
     pass
 
 class ProductNotProducedException(Exception):
+    pass
+
+class ProductNotUpdatedException(Exception):
     pass
 
 class DependencyNotMetException(Exception):
@@ -55,10 +61,27 @@ class Task:
         d = [str(dependency) for dependency in self.dependencies if dependency.exists()]
         if any(not b for b in d):
             raise ProductNotProducedException(f"Task {self.name}: Dependency/ies {d} not met.")
+
+        # Store the last-modification timestamp of the already existing products.
+        pt_before = [(str(product),getmtime(product)) for product in self.products if product.exists()]
+
+        # Call the actual function
         self.func(*self.func_args, **self.func_kwargs)
+
+        # Check if any product does not exist.
         p = [str(product) for product in self.products if not product.exists()]
         if len(p) > 0:
             raise ProductNotProducedException(f"Task {self.name}: Product/s {p} not produced.")
+
+        # Check if any product has not been updated.
+        pt_after = [(str(product),getmtime(product)) for product in self.products]
+        not_updated_products = []
+        for before, after in zip(pt_before, pt_after):
+            if before[0] == after[0] and before[1] == after[1]:
+                not_updated_products.append(before[0])
+
+        if len(not_updated_products) > 0:
+            raise ProductNotUpdatedException(f"Task {self.name}: Product/s {not_updated_products} not updated.")
 
 
 __all__ = [Task, Product, Dependency]
