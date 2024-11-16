@@ -32,7 +32,7 @@ class TaskHandler:
             if t not in self.tasks:
                 raise TaskNotInQueueException("Add the task into the queue in the correct order.")
 
-         # Register output
+         # Register products
         for product in task.products:
             self.registered_products.append(product)
 
