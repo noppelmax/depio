@@ -2,3 +2,4 @@
 src/depio.egg-info
 src/depio/__pycache__
 tests/__pycache__
+.run
