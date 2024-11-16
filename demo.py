@@ -13,13 +13,13 @@ def func1():
 
 
 # Use the decorator with args and kwargs
-@task("Decorator Task", taskhandler)
-def funcdec(input: Annotated[pathlib.Path, Dependency] = "testinput.txt",
-            output: Annotated[pathlib.Path, Product] = "testoutput.txt"
+@task("datapipeline", taskhandler)
+def funcdec(input: Annotated[pathlib.Path, Dependency],
+            output: Annotated[pathlib.Path, Product]
             ):
     print(f"func dec reading from {input} and writing to {output}")
 
-
+funcdec(pathlib.Path("output.txt"), pathlib.Path("final.txt"))
 funcdec(pathlib.Path("input.txt"), pathlib.Path("output.txt"))
 
 taskhandler.run()

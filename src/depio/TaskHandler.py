@@ -1,7 +1,7 @@
 from typing import Set
 import pathlib
 
-from .Task import Task
+from .Task import Task, DependencyNotMetException, ProductNotProducedException
 from .Executors import TaskExecutor
 
 
@@ -78,6 +78,16 @@ class TaskHandler:
 
         # Execute all tasks in the queue
         for task in self.tasks:
-            _submit_task(task)
+            try:
+                _submit_task(task)
+            except DependencyNotMetException as e:
+                print(e)
+                print("Stopping execution!")
+                exit(1)
+            except ProductNotProducedException as e:
+                print(e)
+                print("Stopping execution!")
+                exit(1)
+
 
 __all__ = [TaskHandler]
