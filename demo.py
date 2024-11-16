@@ -18,7 +18,10 @@ def funcdec(input: Annotated[pathlib.Path, Dependency],
     #    f.write("Hallo from depio")
 
 
-funcdec(pathlib.Path("output.txt"), pathlib.Path("final.txt"))
-funcdec(pathlib.Path("input.txt"), pathlib.Path("output.txt"))
+BLD = pathlib.Path("build")
+BLD.mkdir(exist_ok=True)
+
+funcdec(BLD/"output.txt", BLD/"final.txt")
+funcdec(BLD/"input.txt", BLD/"output.txt")
 
 taskhandler.run()
