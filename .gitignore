@@ -1,0 +1,3 @@
+.idea
+src/depio.egg-info/*
+src/depio/__pycache__
