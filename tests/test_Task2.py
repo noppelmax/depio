@@ -11,6 +11,15 @@ class A: pass  # Dummy metaclass for testing
 
 class TestParseAnnotationForMetaclass(unittest.TestCase):
 
+    def test_parse_annotation_for_metaclass(self):
+        """Test _parse_annotation_for_metaclass"""
+
+        def dummy_function(inputa :Annotated[str, A]) -> None: pass
+
+        expected_result = ['inputa']  # 'return' is the annotation name for function return type
+        parsed_annotations = _parse_annotation_for_metaclass(dummy_function, A)
+        self.assertEqual(parsed_annotations, expected_result)
+
     def test_parse_annotation_for_metaclass_return(self):
         """Test _parse_annotation_for_metaclass"""
 
@@ -20,14 +29,13 @@ class TestParseAnnotationForMetaclass(unittest.TestCase):
         parsed_annotations = _parse_annotation_for_metaclass(dummy_function, A)
         self.assertEqual(parsed_annotations, expected_result)
 
-    def test_parse_annotation_for_metaclass(self):
+    def test_parse_annotation_for_metaclass_no_args(self):
         """Test _parse_annotation_for_metaclass"""
 
-        def dummy_function(inputa :Annotated[str, A]) -> None: pass
+        def dummy_function() -> None: pass
 
-        expected_result = ['inputa']  # 'return' is the annotation name for function return type
         parsed_annotations = _parse_annotation_for_metaclass(dummy_function, A)
-        self.assertEqual(parsed_annotations, expected_result)
+        self.assertEqual(parsed_annotations, [])
 
     def test_parse_annotation_for_metaclass_no_metaclass(self):
         """Test _parse_annotation_for_metaclass when no matching metaclass in annotation"""
