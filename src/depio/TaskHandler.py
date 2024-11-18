@@ -16,9 +16,9 @@ class DependencyNotAvailableException(Exception):
     pass
 
 class TaskHandler:
-    def __init__(self, executor: AbstractTaskExecutor):
+    def __init__(self, depioExecutor: AbstractTaskExecutor):
         self.tasks = []
-        self.executor = executor
+        self.depioExecutor = depioExecutor
         self.registered_products = []
         print("depio-TaskHandler initialized")
 
@@ -74,7 +74,7 @@ class TaskHandler:
                     assert isinstance(dependency, pathlib.Path)
 
             # Execute the task
-            self.executor.submit(task)
+            self.depioExecutor.submit(task)
             submitted_tasks.add(task)
 
         # Execute all tasks in the queue
@@ -90,16 +90,22 @@ class TaskHandler:
                 print("Stopping execution bc of not produced product!")
                 exit(1)
 
-        self.executor.wait_for_all()
 
         while True:
+            done, running, cancelled = self.depioExecutor.get_status_of_all_jobs()
             try:
-                self._visualize_tasks()
+                if done + cancelled == len(self.tasks):
+                    self._visualize_tasks()
+                    break
+                else:
+                    self._visualize_tasks()
             except KeyboardInterrupt:
                 print("Stopping execution bc of keyboard interrupt!")
                 exit(1)
-
             time.sleep(1)
+
+
+
 
     def _visualize_tasks(self) -> None:
         print()

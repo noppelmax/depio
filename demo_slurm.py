@@ -1,11 +1,11 @@
 from typing import Annotated
 import pathlib
-from depio.Executors import DemoTaskExecutor
+from depio.Executors import SubmitItExecutor
 from depio.TaskHandler import TaskHandler
 from depio.decorators import task
 from depio.Task import Product, Dependency
 
-executor = SlurmExecutor()
+executor = SubmitItExecutor()
 taskhandler = TaskHandler(executor=executor)
 
 # Use the decorator with args and kwargs
