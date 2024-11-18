@@ -39,6 +39,7 @@ class TaskHandler:
 
         # Register task
         self.tasks.append(task)
+        task.id = len(self.tasks)
 
     def _solve_order(self) -> None:
         # Obtain a output so task mapping.
@@ -54,6 +55,10 @@ class TaskHandler:
                 # Generate the tasks which generate dependencies
                 task.dependencies_soft.append(product_to_task[dependency] if dependency in product_to_task else dependency)
 
+        for task in self.tasks:
+            task.task_dependencies = filter(lambda x: isinstance(x, Task), task.dependencies_hard + task.dependencies_soft)
+            task.path_dependencies = filter(lambda x: isinstance(x, pathlib.Path), task.dependencies_soft)
+
     def run(self) -> None:
         self._solve_order()
         submitted_tasks: Set[Task] = set()
@@ -65,10 +70,7 @@ class TaskHandler:
             is_set_to_depfailed_called = False
 
             # Execute and check all dependencies first
-            task_dependencies = filter(lambda x: isinstance(x, Task), task.dependencies_hard + task.dependencies_soft)
-            path_dependencies = filter(lambda x: isinstance(x, pathlib.Path), task.dependencies_soft)
-
-            for task_dependency in task_dependencies:
+            for task_dependency in task.task_dependencies:
                 assert isinstance(task_dependency, Task)
                 _submit_task(task_dependency)
                 if not task_dependency.is_in_successful_terminal_state:
@@ -78,7 +80,7 @@ class TaskHandler:
                         task.set_to_depfailed() # set to depfailed
                         is_set_to_depfailed_called = True # Remember that we propagated dependency failures
 
-            for path_dependency in path_dependencies:
+            for path_dependency in task.path_dependencies:
                 assert isinstance(path_dependency, pathlib.Path)
                 if not path_dependency.exists():
                     all_dependencies_are_available = False
@@ -129,7 +131,7 @@ class TaskHandler:
     def _visualize_tasks(self) -> None:
         print("Tasks: ")
         for task in self.tasks:
-            print(f"  {task.name:20s} | {task.status[1]:6s}")
+            print(f"  {task.id: 4d}: {task.name:20s} | {task.status[1]:6s}")
             #print(f"  Hard dependencies: {[str(dep) for dep in task.dependencies_hard]}")
             #print(f"  Soft dependencies: {[str(dep) for dep in task.dependencies_soft]}")
             #print(f"  Products:          {[str(p) for p in task.products]}")

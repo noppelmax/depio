@@ -142,7 +142,7 @@ class Task:
         elif self._status == TaskStatus.FAILED:
             return self._status, colored('failed', 'red')
         elif self._status == TaskStatus.DEPFAILED:
-            return self._status, colored('dependency failed', 'red')
+            return self._status, colored('dependency/ies failed', 'red')+f" {[d.id for d in self.task_dependencies if d.is_in_failed_terminal_state]}"
         else:
             return self._status, colored('unknown', 'red')
 
