@@ -17,6 +17,7 @@ class DependencyNotAvailableException(Exception):
 
 class TaskHandler:
     def __init__(self, depioExecutor: AbstractTaskExecutor):
+        self.submitted_tasks = None
         self.tasks = []
         self.depioExecutor = depioExecutor
         self.registered_products = []
@@ -56,28 +57,37 @@ class TaskHandler:
                 task.dependencies_soft.append(product_to_task[dependency] if dependency in product_to_task else dependency)
 
         for task in self.tasks:
-            task.task_dependencies = filter(lambda x: isinstance(x, Task), task.dependencies_hard + task.dependencies_soft)
-            task.path_dependencies = filter(lambda x: isinstance(x, pathlib.Path), task.dependencies_soft)
+            task.task_dependencies = list(filter(lambda x: isinstance(x, Task), task.dependencies_hard + task.dependencies_soft))
+            task.path_dependencies = list(filter(lambda x: isinstance(x, pathlib.Path), task.dependencies_soft))
 
     def _submit_task(self, task: Task) -> bool:
+        """
+        Submits the task to the extractor if all dependencies are available.
+        Otherwise, the function is called recursively for each dependency.
+
+        :param task:
+        :return:
+        """
         if task in self.submitted_tasks: return
 
         all_dependencies_are_available = True
         is_new_depfail_found = False
 
         # Execute and check all dependencies first
-        for task_dependency in task.task_dependencies:
-            self._submit_task(task_dependency) # Recursive call for dependency
-            if not task_dependency.is_in_successful_terminal_state:
+        for t_dep in task.task_dependencies:
+            assert isinstance(t_dep, Task)
+            self._submit_task(t_dep) # Recursive call for dependency
+            if not t_dep.is_in_successful_terminal_state:
                 all_dependencies_are_available = False
 
-            if task_dependency.is_in_failed_terminal_state and not task.is_in_failed_terminal_state:
+            if t_dep.is_in_failed_terminal_state and not task.is_in_failed_terminal_state:
                 # If the task is not already in failed state:
                 task.set_to_depfailed() # set to depfailed
                 is_new_depfail_found = True # Remember that we propagated dependency failures
 
-        for path_dependency in task.path_dependencies:
-            if not path_dependency.exists():
+        for p_dep in task.path_dependencies:
+            assert isinstance(p_dep, pathlib.Path)
+            if not p_dep.exists():
                 all_dependencies_are_available = False
 
                 if not task.is_in_failed_terminal_state:
