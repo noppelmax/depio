@@ -20,7 +20,6 @@ class AbstractTaskExecutor(ABC):
 @frozen
 class DemoTaskExecutor(AbstractTaskExecutor):
     def submit(self, task: Task):
-        print(f"DemoTaskExecutor: Executing task {task.name}")
         task.run()
 
     def wait_for_all(self):
@@ -38,7 +37,6 @@ class ParallelExecutor(AbstractTaskExecutor):
 
     def submit(self, task):
         job = self.internal_executor.submit(task.run)
-        print(f"Parallel Job started: {task.name}")
         self.running_jobs.append(job)
         self.running_tasks.append(task)
         return
@@ -81,7 +79,6 @@ class SubmitItExecutor(AbstractTaskExecutor):
 
     def submit(self, task):
         job = self.internal_executor.submit(task.run)
-        print(f"Slurm Job started: {job.job_id}")
         self.running_jobs.append(job)
         self.running_tasks.append(task)
         return

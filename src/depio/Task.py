@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import enum
-import inspect
+import io
 from os.path import getmtime
 from typing import List, Callable, get_origin, Annotated, get_args
 import sys
 from termcolor import colored
+
+import src.depio.stdio_helpers as stdio_helpers
+
 
 class Product():
     pass
@@ -88,6 +91,10 @@ class Task:
         self.products = [args_dict[argname] for argname in self.products_args]
         self.dependencies = [args_dict[argname] for argname in self.dependencies_args]
 
+        self.saved_stdout = sys.stdout
+        self.stdout = io.StringIO()
+        self.saved_stderr = sys.stderr
+        self.stderr = io.StringIO()
 
     def run(self):
         d = [str(dependency) for dependency in self.dependencies if dependency.exists()]
@@ -102,7 +109,13 @@ class Task:
         self._status = TaskStatus.RUNNING
 
         try:
+            #sys.stdout = self.stdout
+            #sys.stderr = self.stderr
+            self.stdout = stdio_helpers.redirect()
             self.func(*self.func_args, **self.func_kwargs)
+            stdio_helpers.stop_redirect()
+            #sys.stdout = self.saved_stdout
+            #sys.stderr = self.saved_stderr
         except Exception as e:
             self._status = TaskStatus.FAILED
             raise TaskRaisedException(e)
@@ -132,7 +145,7 @@ class Task:
     @property
     def status(self):
         if self._status == TaskStatus.WAITING:
-            return self._status, colored('waiting', 'blue')+f": {[d.id for d in self.task_dependencies if not d.is_in_terminal_state]}"
+            return self._status, colored('waiting', 'blue')+f" for {[d.id for d in self.task_dependencies if not d.is_in_terminal_state]}"
         elif self._status == TaskStatus.RUNNING:
             return self._status, colored('running', 'yellow')
         elif self._status == TaskStatus.FINISHED:
@@ -142,7 +155,7 @@ class Task:
         elif self._status == TaskStatus.FAILED:
             return self._status, colored('failed', 'red')
         elif self._status == TaskStatus.DEPFAILED:
-            return self._status, colored('dependency/ies failed', 'red')+f": {[d.id for d in self.task_dependencies if d.is_in_failed_terminal_state]}"
+            return self._status, colored('dependency/ies failed', 'red')+f" for {[d.id for d in self.task_dependencies if d.is_in_failed_terminal_state]}"
         else:
             return self._status, colored('unknown', 'red')
 
