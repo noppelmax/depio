@@ -193,16 +193,10 @@ class Task:
 
         if self._status == TaskStatus.WAITING:
             ds = [d.queue_id for d in self.task_dependencies if not d.is_in_terminal_state]
-            if len(ds) == 0:
-                return self._status, colored('waiting', 'blue')
-            else:
-                return self._status, colored('waiting', 'blue') + f" for {ds}"
+            return self._status, colored('waiting', 'blue') + (f" for {ds}" if len(ds) > 1 else "")
         elif self._status == TaskStatus.DEPFAILED:
             ds = [d.queue_id for d in self.task_dependencies if d.is_in_failed_terminal_state]
-            if len(ds) == 0:
-                return self._status, colored('dep. failed', 'red')
-            else:
-                return self._status, colored('dep. failed', 'red') + f" at {ds}"
+            return self._status, colored('dep. failed', 'red') + (f" at {ds}" if len(ds) > 1 else "")
         elif self._status == TaskStatus.PENDING:
             return self._status, colored('pending', 'blue')
         elif self._status == TaskStatus.RUNNING:
