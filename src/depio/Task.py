@@ -185,55 +185,46 @@ class Task:
             return ""
     @property
     def statuscolor(self):
-        if self._status == TaskStatus.WAITING:
-            return 'blue'
-        elif self._status == TaskStatus.DEPFAILED:
-            return 'red'
-        elif self._status == TaskStatus.PENDING:
-            return 'blue'
-        elif self._status == TaskStatus.RUNNING:
-            return 'yellow'
-        elif self._status == TaskStatus.FINISHED:
-            return 'green'
-        elif self._status == TaskStatus.SKIPPED:
-            return 'green'
-        elif self._status == TaskStatus.HOLD:
-            return 'white'
-        elif self._status == TaskStatus.FAILED:
-            return 'red'
-        elif self._status == TaskStatus.CANCELED:
-            return 'white'
-        elif self._status == TaskStatus.UNKNOWN:
-            return 'white'
+        status_colors = {
+            TaskStatus.WAITING: 'blue',
+            TaskStatus.DEPFAILED: 'red',
+            TaskStatus.PENDING: 'blue',
+            TaskStatus.RUNNING: 'yellow',
+            TaskStatus.FINISHED: 'green',
+            TaskStatus.SKIPPED: 'green',
+            TaskStatus.HOLD: 'white',
+            TaskStatus.FAILED: 'red',
+            TaskStatus.CANCELED: 'white',
+            TaskStatus.UNKNOWN: 'white'
+        }
+
+        if self._status in status_colors:
+            return status_colors[self._status]
         else:
-            raise UnknownStatusException("Status {} is unknown....".format(self._status))
+            raise UnknownStatusException("Status {} is unknown.".format(self._status))
 
     @property
     def statustext(self):
-        if self._status == TaskStatus.WAITING:
-            ds = [d.queue_id for d in self.task_dependencies if not d.is_in_terminal_state]
-            return 'waiting' + (f" for {ds}" if len(ds) > 1 else "")
-        elif self._status == TaskStatus.DEPFAILED:
-            ds = [d.queue_id for d in self.task_dependencies if d.is_in_failed_terminal_state]
-            return 'dep. failed' + (f" at {ds}" if len(ds) > 1 else "")
-        elif self._status == TaskStatus.PENDING:
-            return 'pending'
-        elif self._status == TaskStatus.RUNNING:
-            return 'running'
-        elif self._status == TaskStatus.FINISHED:
-            return 'finished'
-        elif self._status == TaskStatus.SKIPPED:
-            return 'skipped'
-        elif self._status == TaskStatus.HOLD:
-            return 'hold'
-        elif self._status == TaskStatus.FAILED:
-            return 'failed'
-        elif self._status == TaskStatus.CANCELED:
-            return 'cancelled'
-        elif self._status == TaskStatus.UNKNOWN:
-            return 'unknown'
-        else:
-            raise UnknownStatusException("Status {} is unknown....".format(self._status))
+        status_messages = {
+            TaskStatus.WAITING: lambda: 'waiting' + (f" for {[d.queue_id for d in self.task_dependencies if not d.is_in_terminal_state]}" if len(
+                [d for d in self.task_dependencies if not d.is_in_terminal_state]) > 1 else ""),
+            TaskStatus.DEPFAILED: lambda: 'dep. failed' + (
+                f" at {[d.queue_id for d in self.task_dependencies if d.is_in_failed_terminal_state]}" if len(
+                    [d for d in self.task_dependencies if d.is_in_failed_terminal_state]) > 1 else ""),
+            TaskStatus.PENDING: lambda: 'pending',
+            TaskStatus.RUNNING: lambda: 'running',
+            TaskStatus.FINISHED: lambda: 'finished',
+            TaskStatus.SKIPPED: lambda: 'skipped',
+            TaskStatus.HOLD: lambda: 'hold',
+            TaskStatus.FAILED: lambda: 'failed',
+            TaskStatus.CANCELED: lambda: 'cancelled',
+            TaskStatus.UNKNOWN: lambda: 'unknown'
+        }
+
+        try:
+            return status_messages[self._status]()
+        except KeyError:
+            raise UnknownStatusException(f"Status {self._status} is unknown.")
 
     @property
     def status(self):
