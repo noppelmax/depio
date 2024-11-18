@@ -2,18 +2,10 @@ from typing import Set
 import pathlib
 import time
 
-from .Task import Task, DependencyNotMetException, ProductNotProducedException, TaskStatus
+from .Task import Task, TaskStatus
 from .Executors import AbstractTaskExecutor
+from .exceptions import ProductAlreadyRegisteredException, TaskNotInQueueException
 
-
-class TaskNotInQueueException(Exception):
-    pass
-
-class ProductAlreadyRegisteredException(Exception):
-    pass
-
-class DependencyNotAvailableException(Exception):
-    pass
 
 class TaskHandler:
     def __init__(self, depioExecutor: AbstractTaskExecutor):
@@ -58,7 +50,7 @@ class TaskHandler:
 
         for task in self.tasks:
             task.task_dependencies = list(filter(lambda x: isinstance(x, Task), task.dependencies_hard + task.dependencies_soft))
-            task.path_dependencies = list(filter(lambda x: isinstance(x, pathlib.Path), task.dependencies_soft))
+            task.path_dependencies = list(filter(lambda x: isinstance(x, pathlib.Path), task.dependencies))
 
     def _submit_task(self, task: Task) -> bool:
         """
@@ -125,7 +117,7 @@ class TaskHandler:
             except KeyboardInterrupt:
                 print("Stopping execution bc of keyboard interrupt!")
                 exit(1)
-            time.sleep(0.87)
+            time.sleep(0.20)
 
     def _print_tasks(self) -> None:
         print("Tasks: ")

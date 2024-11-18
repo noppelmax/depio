@@ -8,36 +8,28 @@ import sys
 from termcolor import colored
 
 import src.depio.stdio_helpers as stdio_helpers
+from src.depio.exceptions import ProductNotProducedException, TaskRaisedException
 
 
 class Product():
     pass
 
+
 class Dependency():
     pass
 
-class ProductNotProducedException(Exception):
-    pass
-
-class ProductNotUpdatedException(Exception):
-    pass
-
-class DependencyNotMetException(Exception):
-    pass
-
-class TaskRaisedException(Exception):
-    pass
 
 def python_version_is_greater_equal_3_10():
     return sys.version_info.major > 3 and sys.version_info.minor >= 10
+
 
 # from https://stackoverflow.com/questions/218616/how-to-get-method-parameter-names
 def _get_args_dict(fn, args, kwargs):
     args_names = fn.__code__.co_varnames[:fn.__code__.co_argcount]
     return {**dict(zip(args_names, args)), **kwargs}
 
-def _parse_annotation_for_metaclass(func, metaclass):
 
+def _parse_annotation_for_metaclass(func, metaclass):
     if python_version_is_greater_equal_3_10():
         # For python 3.10 and newer
         # annotations = inspect.get_annotations(func)
@@ -65,21 +57,26 @@ def _parse_annotation_for_metaclass(func, metaclass):
 
     return results
 
+
 class TaskStatus(enum.Enum):
-    WAITING    = enum.auto()
-    RUNNING    = enum.auto()
-    FINISHED   = enum.auto()
-    FAILED     = enum.auto()
-    SKIPPED    = enum.auto()
-    DEPFAILED  = enum.auto()
-    UNKNOWN    = enum.auto()
+    PENDING = enum.auto()
+    WAITING = enum.auto()
+    RUNNING = enum.auto()
+    FINISHED = enum.auto()
+    CANCELED = enum.auto()
+    FAILED = enum.auto()
+    SKIPPED = enum.auto()
+    DEPFAILED = enum.auto()
+    HOLD = enum.auto()
+    UNKNOWN = enum.auto()
+
 
 class Task:
     def __init__(self, name: str, func: Callable, dependencies_hard: List[Task] = None, func_args: List = None, func_kwargs: List = None, ):
         self.name = name
         self.queue_id = None
         self.slurmjob = None
-        self._status: TaskStatus = TaskStatus.UNKNOWN
+        self._status: TaskStatus = TaskStatus.WAITING
         self.func = func
         self.func_args = func_args or []
         self.func_kwargs = func_kwargs or {}
@@ -100,7 +97,7 @@ class Task:
             raise ProductNotProducedException(f"Task {self.name}: Dependency/ies {d} not met.")
 
         # Store the last-modification timestamp of the already existing products.
-        pt_before = [(str(product),getmtime(product)) for product in self.products if product.exists()]
+        pt_before = [(str(product), getmtime(product)) for product in self.products if product.exists()]
 
         # Call the actual function
         self._status = TaskStatus.RUNNING
@@ -120,7 +117,7 @@ class Task:
             raise ProductNotProducedException(f"Task {self.name}: Product/s {p} not produced.")
 
         # Check if any product has not been updated.
-        pt_after = [(str(product),getmtime(product)) for product in self.products]
+        pt_after = [(str(product), getmtime(product)) for product in self.products]
         not_updated_products = []
         for before, after in zip(pt_before, pt_after):
             if before[0] == after[0] and before[1] == after[1]:
@@ -138,24 +135,36 @@ class Task:
     def _update_by_slurmjob(self):
         assert self.slurmjob is not None
 
+        self.slurmjob.watcher.update()
         info = self.slurmjob.get_info()
 
         self._slurmid = f"{self.slurmjob.job_id}/{self.slurmjob.task_id}"
 
-        if self.slurmjob.state == 'RUNNING':
+        if self.slurmjob.state in ['RUNNING', 'CONFIGURING', 'COMPLETING', 'STAGE_OUT']:
             self._status = TaskStatus.RUNNING
-        elif self.slurmjob.state == 'FAILED':
+        elif self.slurmjob.state in ['FAILED', 'BOOT_FAIL', 'DEADLINE', 'NODE_FAIL', 'OUT_OF_MEMORY', 'PREEMPTED', 'SPECIAL_EXIT', 'STOPPED',
+                                     'SUSPENDED', 'TIMEOUT']:
             self._status = TaskStatus.FAILED
-        elif self.slurmjob.state == 'PENDING':
-            self._status = TaskStatus.WAITING
-        elif self.slurmjob.state == 'COMPLETED':
+        elif self.slurmjob.state in ['READY', 'PENDING', 'REQUEUE_FED', 'REQUEUED']:
+            self._status = TaskStatus.PENDING
+        elif self.slurmjob.state == 'CANCELED':
+            self._status = TaskStatus.CANCELED
+        elif self.slurmjob.state in ['COMPLETED']:
             self._status = TaskStatus.FINISHED
+        elif self.slurmjob.state in ['RESV_DEL_HOLD', 'REQUEUE_HOLD', 'RESIZING', 'REVOKED', 'SIGNALING']:
+            self._status = TaskStatus.HOLD
         elif self.slurmjob.state == 'UNKNOWN':
             self._status = TaskStatus.UNKNOWN
         else:
             raise Exception(f"Unknown slurmjob status! slurmjob.done {self.slurmjob.done}, slurmjob.state {self.slurmjob.state} ")
 
-        #if self.slurmjob.done():
+    @property
+    def slurmjob_status(self):
+        if not self.slurmjob is None:
+            return self.slurmjob.state
+        else:
+            return ""
+        # if self.slurmjob.done():
         #    self._status = TaskStatus.FINISHED
 
     @property
@@ -164,39 +173,53 @@ class Task:
             self._update_by_slurmjob()
 
         if self._status == TaskStatus.WAITING:
-            ds = [d.id for d in self.task_dependencies if not d.is_in_terminal_state]
+            ds = [d.queue_id for d in self.task_dependencies if not d.is_in_terminal_state]
             if len(ds) == 0:
-                return self._status, colored('waiting', 'blue')
+                return self._status, colored('waiting  ', 'blue')
             else:
-                return self._status, colored('waiting', 'blue') + f" for {ds}"
+                return self._status, colored('waiting  ', 'blue') + f" for {ds}"
         elif self._status == TaskStatus.RUNNING:
-            return self._status, colored('running', 'yellow')
+            return self._status, colored('running  ', 'yellow')
         elif self._status == TaskStatus.FINISHED:
-            return self._status, colored('finished', 'green')
+            return self._status, colored('finished ', 'green')
         elif self._status == TaskStatus.SKIPPED:
-            return self._status, colored('skipped', 'green')
+            return self._status, colored('skipped  ', 'green')
+        elif self._status == TaskStatus.HOLD:
+            return self._status, colored('hold     ', 'white')
         elif self._status == TaskStatus.FAILED:
-            return self._status, colored('failed', 'red')
+            return self._status, colored('failed   ', 'red')
         elif self._status == TaskStatus.DEPFAILED:
-            ds = [d.id for d in self.task_dependencies if d.is_in_failed_terminal_state]
+            ds = [d.queue_id for d in self.task_dependencies if d.is_in_failed_terminal_state]
             if len(ds) == 0:
                 return self._status, colored('dependency/ies failed', 'red')
             else:
-                return self._status, colored('dependency/ies failed', 'red')+f" for {ds}"
+                return self._status, colored('dependency/ies failed', 'red') + f" for {ds}"
+        elif self._status == TaskStatus.CANCELED:
+            return self._status, colored('cancelled', 'white')
         else:
-            return self._status, colored('unknown', 'white')
+            return self._status, colored('unknown  ', 'white')
 
     @property
     def is_in_terminal_state(self):
-        return self.status[0] in [TaskStatus.FINISHED, TaskStatus.FAILED, TaskStatus.SKIPPED, TaskStatus.DEPFAILED]
+        return self.status[0] in [
+            TaskStatus.FINISHED,
+            TaskStatus.FAILED,
+            TaskStatus.SKIPPED,
+            TaskStatus.DEPFAILED,
+            TaskStatus.CANCELED]
 
     @property
     def is_in_successful_terminal_state(self):
-        return self.status[0] in [TaskStatus.FINISHED, TaskStatus.SKIPPED]
+        return self.status[0] in [
+            TaskStatus.FINISHED,
+            TaskStatus.SKIPPED]
 
     @property
     def is_in_failed_terminal_state(self):
-        return self.status[0]  in [TaskStatus.FAILED, TaskStatus.DEPFAILED]
+        return self.status[0] in [
+            TaskStatus.FAILED,
+            TaskStatus.DEPFAILED,
+            TaskStatus.CANCELED]
 
     def set_to_depfailed(self):
         self.status[0] = TaskStatus.DEPFAILED
@@ -211,7 +234,7 @@ class Task:
             self._update_by_slurmjob()
             return f"{self._slurmid}"
         else:
-            return "NONE"
+            return ""
 
     def stdout(self):
         if self.slurmjob:
