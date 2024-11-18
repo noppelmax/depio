@@ -40,7 +40,7 @@ class TaskHandler:
 
         # Register task
         self.tasks.append(task)
-        task.id = len(self.tasks)
+        task.queue_id = len(self.tasks)
 
     def _solve_order(self) -> None:
         # Obtain a output so task mapping.
@@ -119,6 +119,8 @@ class TaskHandler:
                 if all_tasks_in_terminal_state:
                     if any(task.is_in_failed_terminal_state for task in self.tasks):
                         self.exit_with_failed_tasks()
+                    else:
+                        self.exit_successful()
 
             except KeyboardInterrupt:
                 print("Stopping execution bc of keyboard interrupt!")
@@ -128,7 +130,7 @@ class TaskHandler:
     def _print_tasks(self) -> None:
         print("Tasks: ")
         for task in self.tasks:
-            print(f"  {task.id: 4d}: {task.name:20s} | {task.status[1]:6s}")
+            print(f"  {task.id}: {task.name:20s} | {task.slurmid:10s} | {task.status[1]:15s} | {[str(d) for d in task.path_dependencies]} -> {[str(p) for p in task.products]}")
             #print(f"  Task dependencies: {[t for t in task.task_dependencies]}")
             #print(f"  Path dependencies: {[str(p) for p in task.path_dependencies]}")
             #print(f"  Products:          {[str(p) for p in task.products]}")
@@ -140,15 +142,19 @@ class TaskHandler:
         for task in self.tasks:
             if task.status[0] == TaskStatus.FAILED: # Only for task that failed on their own
                 print("--------------------------------------------------------------------")
-                print(f"  {task.id: 4d}: {task.name:20s} | {task.status[1]:6s}")
+                print(f"  {task.id}: {task.name:20s} | {task.slurmid:10s} | {task.status[1]:15s}")
                 print("------ STDOUT ------------------------------------------------------")
-                print(task.stdout.getvalue())
-                if task.stderr.getvalue() != "":
+                print(task.stdout())
+                if task.stderr() != "":
                     print("------ STDERR ------------------------------------------------------")
-                    print(task.stderr.getvalue())
+                    print(task.stderr())
 
         print("--------------------------------------------------------------------")
 
-
+        print("Exit.")
         exit(1)
+
+    def exit_successful(self) -> None:
+        print("All jobs done! Exit.")
+        exit(0)
 __all__ = [TaskHandler]

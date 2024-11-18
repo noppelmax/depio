@@ -41,22 +41,6 @@ class ParallelExecutor(AbstractTaskExecutor):
         self.running_tasks.append(task)
         return
 
-
-    def get_status_of_all_jobs(self):
-        done = 0
-        running = 0
-        cancelled = 0
-
-        for job in self.running_jobs:
-            if job.done():
-                done += 1
-            elif job.running():
-                running += 1
-            elif job.cancelled():
-                cancelled += 1
-
-        return done, running, cancelled
-
     def wait_for_all(self):
         for job in self.running_jobs:
             job.result()
@@ -79,6 +63,7 @@ class SubmitItExecutor(AbstractTaskExecutor):
 
     def submit(self, task):
         job = self.internal_executor.submit(task.run)
+        task.slurmjob = job
         self.running_jobs.append(job)
         self.running_tasks.append(task)
         return
