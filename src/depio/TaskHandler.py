@@ -2,7 +2,7 @@ from typing import Set
 import pathlib
 import time
 
-from .Task import Task, DependencyNotMetException, ProductNotProducedException
+from .Task import Task, DependencyNotMetException, ProductNotProducedException, TaskStatus
 from .Executors import AbstractTaskExecutor
 
 
@@ -44,7 +44,6 @@ class TaskHandler:
         # Obtain a output so task mapping.
         product_to_task = {product: task for task in self.tasks for product in task.products}
 
-
         # Assign the soft dependencies to the tasks
         for task in self.tasks:
             task.dependencies_soft = []
@@ -60,41 +59,54 @@ class TaskHandler:
         submitted_tasks: Set[Task] = set()
 
         def _submit_task(task: Task) -> None:
-            if task in submitted_tasks:
-                return
+            if task in submitted_tasks: return
+
+            all_dependencies_are_available = True
 
             # Execute all dependencies first
             for dependency in task.dependencies_hard:
                 assert isinstance(dependency, Task)
                 _submit_task(dependency)
+                if not dependency.is_successfully_terminated:
+                    all_dependencies_are_available = False
+
             for dependency in task.dependencies_soft:
                 if isinstance(dependency, Task):
                     _submit_task(dependency)
+                    if not dependency.is_successfully_terminated:
+                        all_dependencies_are_available = False
                 else:
                     assert isinstance(dependency, pathlib.Path)
+                    if not dependency.exists():
+                        all_dependencies_are_available = False
 
             # Execute the task
-            self.depioExecutor.submit(task)
-            submitted_tasks.add(task)
-
-        # Execute all tasks in the queue
-        for task in self.tasks:
-            try:
-                _submit_task(task)
-            except DependencyNotMetException as e:
-                print(e)
-                print("Stopping execution bc of missing dependency!")
-                exit(1)
-            except ProductNotProducedException as e:
-                print(e)
-                print("Stopping execution bc of not produced product!")
-                exit(1)
+            if all_dependencies_are_available:
+                self.depioExecutor.submit(task)
+                submitted_tasks.add(task)
 
 
         while True:
-            done, running, cancelled = self.depioExecutor.get_status_of_all_jobs()
+            # Iterate over all tasks in the queue
+            for task in self.tasks:
+                try:
+                    _submit_task(task)
+                except DependencyNotMetException as e:
+                    print(e)
+                    print("Stopping execution bc of missing dependency!")
+                    exit(1)
+                except ProductNotProducedException as e:
+                    print(e)
+                    print("Stopping execution bc of not produced product!")
+                    exit(1)
+                except KeyboardInterrupt:
+                    print("Stopping execution bc of keyboard interrupt!")
+                    exit(1)
+
+            # Check the status of all tasks
+            all_tasks_in_terminal_state = all(task.is_in_terminal_state for task in self.tasks)
             try:
-                if done + cancelled == len(self.tasks):
+                if all_tasks_in_terminal_state:
                     self._visualize_tasks()
                     break
                 else:
@@ -104,13 +116,10 @@ class TaskHandler:
                 exit(1)
             time.sleep(1)
 
-
-
-
     def _visualize_tasks(self) -> None:
-        print()
+        print("Tasks: ")
         for task in self.tasks:
-            print(f"Task: {task.name}   {task.status[1]}")
+            print(f"  {task.name:20s} | {task.status[1]:6s}")
             #print(f"  Hard dependencies: {[str(dep) for dep in task.dependencies_hard]}")
             #print(f"  Soft dependencies: {[str(dep) for dep in task.dependencies_soft]}")
             #print(f"  Products:          {[str(p) for p in task.products]}")

@@ -60,7 +60,7 @@ def _parse_annotation_for_metaclass(func, metaclass):
     return results
 
 class TaskStatus(enum.Enum):
-    NEW        = enum.auto()
+    WAITING    = enum.auto()
     RUNNING    = enum.auto()
     FINISHED   = enum.auto()
     FAILED     = enum.auto()
@@ -70,7 +70,7 @@ class TaskStatus(enum.Enum):
 class Task:
     def __init__(self, name: str, func: Callable, dependencies_hard: List[Task] = None, func_args: List = None, func_kwargs: List = None, ):
         self.name = name
-        self._status: TaskStatus = TaskStatus.NEW
+        self._status: TaskStatus = TaskStatus.WAITING
         self.func = func
         self.func_args = func_args or []
         self.func_kwargs = func_kwargs or {}
@@ -123,8 +123,8 @@ class Task:
 
     @property
     def status(self):
-        if self._status == TaskStatus.NEW:
-            return self._status, colored('new', 'yellow')
+        if self._status == TaskStatus.WAITING:
+            return self._status, colored('waiting', 'yellow')
         elif self._status == TaskStatus.RUNNING:
             return self._status, colored('running', 'yellow')
         elif self._status == TaskStatus.FINISHED:
@@ -135,5 +135,16 @@ class Task:
             return self._status, colored('failed', 'red')
         else:
             return self._status, colored('unknown', 'red')
+
+    @property
+    def is_in_terminal_state(self):
+        return self._status in [TaskStatus.FINISHED, TaskStatus.FAILED, TaskStatus.SKIPPED]
+
+    @property
+    def is_successfully_terminated(self):
+        return self._status in [TaskStatus.FINISHED, TaskStatus.SKIPPED]
+
+
+
 
 __all__ = [Task, Product, Dependency]

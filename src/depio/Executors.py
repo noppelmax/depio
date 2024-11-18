@@ -45,7 +45,6 @@ class ParallelExecutor(AbstractTaskExecutor):
 
 
     def get_status_of_all_jobs(self):
-
         done = 0
         running = 0
         cancelled = 0
