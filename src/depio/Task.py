@@ -195,6 +195,12 @@ class Task:
                 return self._status, colored('waiting  ', 'blue')
             else:
                 return self._status, colored('waiting  ', 'blue') + f" for {ds}"
+        elif self._status == TaskStatus.DEPFAILED:
+            ds = [d.queue_id for d in self.task_dependencies if d.is_in_failed_terminal_state]
+            if len(ds) == 0:
+                return self._status, colored('dependency/ies failed', 'red')
+            else:
+                return self._status, colored('dependency/ies failed', 'red') + f" for {ds}"
         elif self._status == TaskStatus.RUNNING:
             return self._status, colored('running  ', 'yellow')
         elif self._status == TaskStatus.FINISHED:
@@ -205,12 +211,6 @@ class Task:
             return self._status, colored('hold     ', 'white')
         elif self._status == TaskStatus.FAILED:
             return self._status, colored('failed   ', 'red')
-        elif self._status == TaskStatus.DEPFAILED:
-            ds = [d.queue_id for d in self.task_dependencies if d.is_in_failed_terminal_state]
-            if len(ds) == 0:
-                return self._status, colored('dependency/ies failed', 'red')
-            else:
-                return self._status, colored('dependency/ies failed', 'red') + f" for {ds}"
         elif self._status == TaskStatus.CANCELED:
             return self._status, colored('cancelled', 'white')
         else:
