@@ -183,38 +183,62 @@ class Task:
             return self.slurmjob.state
         else:
             return ""
-        # if self.slurmjob.done():
-        #    self._status = TaskStatus.FINISHED
+    @property
+    def statuscolor(self):
+        if self._status == TaskStatus.WAITING:
+            return 'blue'
+        elif self._status == TaskStatus.DEPFAILED:
+            return 'red'
+        elif self._status == TaskStatus.PENDING:
+            return 'blue'
+        elif self._status == TaskStatus.RUNNING:
+            return 'yellow'
+        elif self._status == TaskStatus.FINISHED:
+            return 'green'
+        elif self._status == TaskStatus.SKIPPED:
+            return 'green'
+        elif self._status == TaskStatus.HOLD:
+            return 'white'
+        elif self._status == TaskStatus.FAILED:
+            return 'red'
+        elif self._status == TaskStatus.CANCELED:
+            return 'white'
+        elif self._status == TaskStatus.UNKNOWN:
+            return 'white'
+        else:
+            raise UnknownStatusException("Status {} is unknown....".format(self._status))
+
+    @property
+    def statustext(self):
+        if self._status == TaskStatus.WAITING:
+            ds = [d.queue_id for d in self.task_dependencies if not d.is_in_terminal_state]
+            return 'waiting' + (f" for {ds}" if len(ds) > 1 else "")
+        elif self._status == TaskStatus.DEPFAILED:
+            ds = [d.queue_id for d in self.task_dependencies if d.is_in_failed_terminal_state]
+            return 'dep. failed' + (f" at {ds}" if len(ds) > 1 else "")
+        elif self._status == TaskStatus.PENDING:
+            return 'pending'
+        elif self._status == TaskStatus.RUNNING:
+            return 'running'
+        elif self._status == TaskStatus.FINISHED:
+            return 'finished'
+        elif self._status == TaskStatus.SKIPPED:
+            return 'skipped'
+        elif self._status == TaskStatus.HOLD:
+            return 'hold'
+        elif self._status == TaskStatus.FAILED:
+            return 'failed'
+        elif self._status == TaskStatus.CANCELED:
+            return 'cancelled'
+        elif self._status == TaskStatus.UNKNOWN:
+            return 'unknown'
+        else:
+            raise UnknownStatusException("Status {} is unknown....".format(self._status))
 
     @property
     def status(self):
-        if not self.slurmjob is None:
-            self._update_by_slurmjob()
+        return self._status, colored(self.statustext, self.statuscolor)
 
-        if self._status == TaskStatus.WAITING:
-            ds = [d.queue_id for d in self.task_dependencies if not d.is_in_terminal_state]
-            return self._status, colored('waiting', 'blue') + (f" for {ds}" if len(ds) > 1 else "")
-        elif self._status == TaskStatus.DEPFAILED:
-            ds = [d.queue_id for d in self.task_dependencies if d.is_in_failed_terminal_state]
-            return self._status, colored('dep. failed', 'red') + (f" at {ds}" if len(ds) > 1 else "")
-        elif self._status == TaskStatus.PENDING:
-            return self._status, colored('pending', 'blue')
-        elif self._status == TaskStatus.RUNNING:
-            return self._status, colored('running', 'yellow')
-        elif self._status == TaskStatus.FINISHED:
-            return self._status, colored('finished', 'green')
-        elif self._status == TaskStatus.SKIPPED:
-            return self._status, colored('skipped', 'green')
-        elif self._status == TaskStatus.HOLD:
-            return self._status, colored('hold', 'white')
-        elif self._status == TaskStatus.FAILED:
-            return self._status, colored('failed', 'red')
-        elif self._status == TaskStatus.CANCELED:
-            return self._status, colored('cancelled', 'white')
-        elif self._status == TaskStatus.UNKNOWN:
-            return self._status, colored('unknown', 'white')
-        else:
-            raise UnknownStatusException("Status {} is unknown....".format(self._status))
 
     @property
     def is_in_terminal_state(self):
