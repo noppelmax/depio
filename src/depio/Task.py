@@ -192,29 +192,29 @@ class Task:
         if self._status == TaskStatus.WAITING:
             ds = [d.queue_id for d in self.task_dependencies if not d.is_in_terminal_state]
             if len(ds) == 0:
-                return self._status, colored('waiting  ', 'blue')
+                return self._status, colored('waiting    ', 'blue')
             else:
-                return self._status, colored('waiting  ', 'blue') + f" for {ds}"
+                return self._status, colored('waiting    ', 'blue') + f" for {ds}"
         elif self._status == TaskStatus.DEPFAILED:
             ds = [d.queue_id for d in self.task_dependencies if d.is_in_failed_terminal_state]
             if len(ds) == 0:
-                return self._status, colored('dependency/ies failed', 'red')
+                return self._status, colored('dep. failed', 'red')
             else:
-                return self._status, colored('dependency/ies failed', 'red') + f" for {ds}"
+                return self._status, colored('dep. failed', 'red') + f" at {ds}"
         elif self._status == TaskStatus.RUNNING:
-            return self._status, colored('running  ', 'yellow')
+            return self._status, colored('running    ', 'yellow')
         elif self._status == TaskStatus.FINISHED:
-            return self._status, colored('finished ', 'green')
+            return self._status, colored('finished   ', 'green')
         elif self._status == TaskStatus.SKIPPED:
-            return self._status, colored('skipped  ', 'green')
+            return self._status, colored('skipped    ', 'green')
         elif self._status == TaskStatus.HOLD:
-            return self._status, colored('hold     ', 'white')
+            return self._status, colored('hold       ', 'white')
         elif self._status == TaskStatus.FAILED:
-            return self._status, colored('failed   ', 'red')
+            return self._status, colored('failed     ', 'red')
         elif self._status == TaskStatus.CANCELED:
-            return self._status, colored('cancelled', 'white')
+            return self._status, colored('cancelled  ', 'white')
         else:
-            return self._status, colored('unknown  ', 'white')
+            return self._status, colored('unknown    ', 'white')
 
     @property
     def is_in_terminal_state(self):
