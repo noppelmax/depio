@@ -36,5 +36,6 @@ funcdec(BLD/"input.txt", BLD/"output.txt",sec=5)
 funcdec(BLD/"input.txt", BLD/"output1.txt",sec=2)
 funcdec(BLD/"input.txt", BLD/"output2.txt",sec=1)
 funcdec(BLD/"output1.txt", BLD/"final1.txt",sec=1)
+funcdec(BLD/"final1.txt", BLD/"final_final1.txt",sec=1)
 
-taskhandler.run()
+exit(taskhandler.run())
