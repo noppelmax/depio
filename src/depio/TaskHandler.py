@@ -122,7 +122,7 @@ class TaskHandler:
     def _print_tasks(self) -> None:
         print("Tasks: ")
         for task in self.tasks:
-            print(f"  {task.id}: {task.name:20s} | {task.slurmid:10s} | {task.status[1]:15s} | {[str(d) for d in task.path_dependencies]} -> {[str(p) for p in task.products]}")
+            print(f"  {task.id}: {task.name:20s} | {task.slurmid:10s}-{task.slurmjob_status:10s} | {task.status[1]:15s} | {[str(d) for d in task.path_dependencies]} -> {[str(p) for p in task.products]}")
             #print(f"  Task dependencies: {[t for t in task.task_dependencies]}")
             #print(f"  Path dependencies: {[str(p) for p in task.path_dependencies]}")
             #print(f"  Products:          {[str(p) for p in task.products]}")

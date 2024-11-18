@@ -16,6 +16,9 @@ class DependencyNotMetException(Exception):
 class TaskRaisedException(Exception):
     pass
 
+class UnknownStatusException:
+    pass
+
 
 # TASKHANDLER EXCEPTION
 class TaskNotInQueueException(Exception):

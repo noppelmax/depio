@@ -15,15 +15,16 @@ BLD.mkdir(exist_ok=True)
 SLURM = pathlib.Path("slurm")
 SLURM.mkdir(exist_ok=True)
 
-internal_executor = submitit.AutoExecutor(folder=SLURM)
 
 # Configure the slurm jobs
-# TODO We might want to do this on a job level
 os.environ["SBATCH_RESERVATION"] = "isec-team"
+internal_executor = submitit.AutoExecutor(folder=SLURM)
+
+# TODO We might want to do this on a job level
 internal_executor.update_parameters(
-            time="48:00:00",
+            time=60*48, # in mins
             partition="gpu",
-            mem_gb=32
+            mem=32
 )
 
 depioExecutor = SubmitItExecutor(internal_executor=internal_executor)

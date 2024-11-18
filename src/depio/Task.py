@@ -8,7 +8,7 @@ import sys
 from termcolor import colored
 
 import src.depio.stdio_helpers as stdio_helpers
-from src.depio.exceptions import ProductNotProducedException, TaskRaisedException
+from src.depio.exceptions import ProductNotProducedException, TaskRaisedException, UnknownStatusException
 
 
 class Product():
@@ -85,6 +85,8 @@ FAILED_TERMINAL_STATES = [
             TaskStatus.FAILED,
             TaskStatus.DEPFAILED,
             TaskStatus.CANCELED]
+
+
 
 
 
@@ -194,13 +196,15 @@ class Task:
             if len(ds) == 0:
                 return self._status, colored('waiting    ', 'blue')
             else:
-                return self._status, colored('waiting    ', 'blue') + f" for {ds}"
+                return self._status, colored('waiting', 'blue') + f" for {ds}"
         elif self._status == TaskStatus.DEPFAILED:
             ds = [d.queue_id for d in self.task_dependencies if d.is_in_failed_terminal_state]
             if len(ds) == 0:
                 return self._status, colored('dep. failed', 'red')
             else:
                 return self._status, colored('dep. failed', 'red') + f" at {ds}"
+        elif self._status == TaskStatus.PENDING:
+            return self._status, colored('pending    ', 'blue')
         elif self._status == TaskStatus.RUNNING:
             return self._status, colored('running    ', 'yellow')
         elif self._status == TaskStatus.FINISHED:
@@ -213,8 +217,10 @@ class Task:
             return self._status, colored('failed     ', 'red')
         elif self._status == TaskStatus.CANCELED:
             return self._status, colored('cancelled  ', 'white')
-        else:
+        elif self._status == TaskStatus.CANCELED:
             return self._status, colored('unknown    ', 'white')
+        else:
+            raise UnknownStatusException("Status {} is unknown....".format(self._status))
 
     @property
     def is_in_terminal_state(self):
