@@ -70,6 +70,23 @@ class TaskStatus(enum.Enum):
     HOLD = enum.auto()
     UNKNOWN = enum.auto()
 
+TERMINAL_STATES = [
+            TaskStatus.FINISHED,
+            TaskStatus.FAILED,
+            TaskStatus.SKIPPED,
+            TaskStatus.DEPFAILED,
+            TaskStatus.CANCELED]
+
+SUCCESSFUL_TERMINAL_STATES = [
+            TaskStatus.FINISHED,
+            TaskStatus.SKIPPED]
+
+FAILED_TERMINAL_STATES = [
+            TaskStatus.FAILED,
+            TaskStatus.DEPFAILED,
+            TaskStatus.CANCELED]
+
+
 
 class Task:
     def __init__(self, name: str, func: Callable, dependencies_hard: List[Task] = None, func_args: List = None, func_kwargs: List = None, ):
@@ -201,25 +218,15 @@ class Task:
 
     @property
     def is_in_terminal_state(self):
-        return self.status[0] in [
-            TaskStatus.FINISHED,
-            TaskStatus.FAILED,
-            TaskStatus.SKIPPED,
-            TaskStatus.DEPFAILED,
-            TaskStatus.CANCELED]
+        return self.status[0] in TERMINAL_STATES
 
     @property
     def is_in_successful_terminal_state(self):
-        return self.status[0] in [
-            TaskStatus.FINISHED,
-            TaskStatus.SKIPPED]
+        return self.status[0] in SUCCESSFUL_TERMINAL_STATES
 
     @property
     def is_in_failed_terminal_state(self):
-        return self.status[0] in [
-            TaskStatus.FAILED,
-            TaskStatus.DEPFAILED,
-            TaskStatus.CANCELED]
+        return self.status[0] in FAILED_TERMINAL_STATES
 
     def set_to_depfailed(self):
         self.status[0] = TaskStatus.DEPFAILED
