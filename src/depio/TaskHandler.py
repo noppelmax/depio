@@ -123,7 +123,7 @@ class TaskHandler:
             except KeyboardInterrupt:
                 print("Stopping execution bc of keyboard interrupt!")
                 exit(1)
-            time.sleep(1)
+            time.sleep(0.87)
 
     def _print_tasks(self) -> None:
         print("Tasks: ")

@@ -132,7 +132,7 @@ class Task:
     @property
     def status(self):
         if self._status == TaskStatus.WAITING:
-            return self._status, colored('waiting', 'yellow')+f": {[d.id for d in self.task_dependencies if not d.is_in_terminal_state]}"
+            return self._status, colored('waiting', 'blue')+f": {[d.id for d in self.task_dependencies if not d.is_in_terminal_state]}"
         elif self._status == TaskStatus.RUNNING:
             return self._status, colored('running', 'yellow')
         elif self._status == TaskStatus.FINISHED:
