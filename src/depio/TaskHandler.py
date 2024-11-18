@@ -59,81 +59,68 @@ class TaskHandler:
             task.task_dependencies = filter(lambda x: isinstance(x, Task), task.dependencies_hard + task.dependencies_soft)
             task.path_dependencies = filter(lambda x: isinstance(x, pathlib.Path), task.dependencies_soft)
 
+    def _submit_task(self, task: Task) -> bool:
+        if task in self.submitted_tasks: return
+
+        all_dependencies_are_available = True
+        is_new_depfail_found = False
+
+        # Execute and check all dependencies first
+        for task_dependency in task.task_dependencies:
+            self._submit_task(task_dependency) # Recursive call for dependency
+            if not task_dependency.is_in_successful_terminal_state:
+                all_dependencies_are_available = False
+
+            if task_dependency.is_in_failed_terminal_state and not task.is_in_failed_terminal_state:
+                # If the task is not already in failed state:
+                task.set_to_depfailed() # set to depfailed
+                is_new_depfail_found = True # Remember that we propagated dependency failures
+
+        for path_dependency in task.path_dependencies:
+            if not path_dependency.exists():
+                all_dependencies_are_available = False
+
+                if not task.is_in_failed_terminal_state:
+                    # If the task is not already in failed state:
+                    task.set_to_depfailed() # set to depfailed
+                    is_new_depfail_found = True # Remember that we propagated dependency failures
+
+        # Execute the task if all dependencies are given
+        if all_dependencies_are_available:
+            self.depioExecutor.submit(task)
+            self.submitted_tasks.add(task)
+
+        return is_new_depfail_found
+
     def run(self) -> None:
         self._solve_order()
-        submitted_tasks: Set[Task] = set()
-
-        def _submit_task(task: Task) -> bool:
-            if task in submitted_tasks: return
-
-            all_dependencies_are_available = True
-            is_set_to_depfailed_called = False
-
-            # Execute and check all dependencies first
-            for task_dependency in task.task_dependencies:
-                assert isinstance(task_dependency, Task)
-                _submit_task(task_dependency)
-                if not task_dependency.is_in_successful_terminal_state:
-                    all_dependencies_are_available = False
-                if task_dependency.is_in_failed_terminal_state:
-                    if not task.is_in_failed_terminal_state: # If the task is not already in failed state:
-                        task.set_to_depfailed() # set to depfailed
-                        is_set_to_depfailed_called = True # Remember that we propagated dependency failures
-
-            for path_dependency in task.path_dependencies:
-                assert isinstance(path_dependency, pathlib.Path)
-                if not path_dependency.exists():
-                    all_dependencies_are_available = False
-                    if not task.is_in_failed_terminal_state: # If the task is not already in failed state:
-                        task.set_to_depfailed() # set to depfailed
-                        is_set_to_depfailed_called = True # Remember that we propagated dependency failures
-
-            # Execute the task if all dependencies are given
-            if all_dependencies_are_available:
-                self.depioExecutor.submit(task)
-                submitted_tasks.add(task)
-
-            return is_set_to_depfailed_called
+        self.submitted_tasks: Set[Task] = set()
 
         while True:
-            # Iterate over all tasks in the queue
-            is_set_to_depfailed_called = True
-            while is_set_to_depfailed_called:
-                is_set_to_depfailed_called = False
-                for task in self.tasks:
-                    try:
-                        if _submit_task(task):
-                            is_set_to_depfailed_called = True
-                    except DependencyNotMetException as e:
-                        print(e)
-                        print("Stopping execution bc of missing dependency!")
-                        exit(1)
-                    except ProductNotProducedException as e:
-                        print(e)
-                        print("Stopping execution bc of not produced product!")
-                        exit(1)
-                    except KeyboardInterrupt:
-                        print("Stopping execution bc of keyboard interrupt!")
-                        exit(1)
-
-            # Check the status of all tasks
-            all_tasks_in_terminal_state = all(task.is_in_terminal_state for task in self.tasks)
             try:
-                self._visualize_tasks()
+                # Iterate over all tasks in the queue until now new depfail is found
+                while True:
+                    if all(not self._submit_task(task) for task in self.tasks):
+                        break
+
+                # Check the status of all tasks
+                all_tasks_in_terminal_state = all(task.is_in_terminal_state for task in self.tasks)
+                self._print_tasks()
                 if all_tasks_in_terminal_state:
                     if any(task.is_in_failed_terminal_state for task in self.tasks):
                         exit(1)
+
             except KeyboardInterrupt:
                 print("Stopping execution bc of keyboard interrupt!")
                 exit(1)
             time.sleep(1)
 
-    def _visualize_tasks(self) -> None:
+    def _print_tasks(self) -> None:
         print("Tasks: ")
         for task in self.tasks:
             print(f"  {task.id: 4d}: {task.name:20s} | {task.status[1]:6s}")
-            #print(f"  Hard dependencies: {[str(dep) for dep in task.dependencies_hard]}")
-            #print(f"  Soft dependencies: {[str(dep) for dep in task.dependencies_soft]}")
+            #print(f"  Task dependencies: {[t for t in task.task_dependencies]}")
+            #print(f"  Path dependencies: {[str(p) for p in task.path_dependencies]}")
             #print(f"  Products:          {[str(p) for p in task.products]}")
 
 

@@ -11,10 +11,11 @@ from src.depio.Executors import ParallelExecutor
 
 depioExecutor = DemoTaskExecutor()
 depioExecutor = ParallelExecutor()
-taskhandler = TaskHandler(depioExecutor=depioExecutor)
+
+defaultpipeline = TaskHandler(depioExecutor=depioExecutor)
 
 # Use the decorator with args and kwargs
-@task("datapipeline", taskhandler)
+@task("datapipeline", defaultpipeline)
 def funcdec(input: Annotated[pathlib.Path, Dependency],
             output: Annotated[pathlib.Path, Product],
             sec:int
@@ -31,11 +32,11 @@ def funcdec(input: Annotated[pathlib.Path, Dependency],
 BLD = pathlib.Path("build")
 BLD.mkdir(exist_ok=True)
 
-funcdec(BLD/"output.txt", BLD/"final.txt",sec=3)
-funcdec(BLD/"input.txt", BLD/"output.txt",sec=5)
-funcdec(BLD/"input.txt", BLD/"output1.txt",sec=2)
-funcdec(BLD/"input.txt", BLD/"output2.txt",sec=1)
-funcdec(BLD/"output1.txt", BLD/"final1.txt",sec=1)
-funcdec(BLD/"final1.txt", BLD/"final_final1.txt",sec=1)
+#funcdec(BLD/"output.txt", BLD/"final.txt",sec=3)
+#funcdec(BLD/"input.txt", BLD/"output.txt",sec=5)
 
-exit(taskhandler.run())
+funcdec(BLD/"input.txt", BLD/"output1.txt",sec=2)
+funcdec(BLD/"output1.txt", BLD/"final1.txt",sec=1)
+funcdec(BLD/"final1.txt", BLD/"final_final1.txt",sec=2)
+
+exit(defaultpipeline.run())
