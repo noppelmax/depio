@@ -22,6 +22,9 @@ class ProductNotUpdatedException(Exception):
 class DependencyNotMetException(Exception):
     pass
 
+class TaskRaisedException(Exception):
+    pass
+
 def python_version_is_greater_equal_3_10():
     return sys.version_info.major > 3 and sys.version_info.minor >= 10
 
@@ -65,6 +68,7 @@ class TaskStatus(enum.Enum):
     FINISHED   = enum.auto()
     FAILED     = enum.auto()
     SKIPPED    = enum.auto()
+    DEPFAILED  = enum.auto()
 
 
 class Task:
@@ -96,8 +100,12 @@ class Task:
 
         # Call the actual function
         self._status = TaskStatus.RUNNING
-        self.func(*self.func_args, **self.func_kwargs)
 
+        try:
+            self.func(*self.func_args, **self.func_kwargs)
+        except Exception as e:
+            self._status = TaskStatus.FAILED
+            raise TaskRaisedException(e)
 
         # Check if any product does not exist.
         p = [str(product) for product in self.products if not product.exists()]
@@ -124,7 +132,7 @@ class Task:
     @property
     def status(self):
         if self._status == TaskStatus.WAITING:
-            return self._status, colored('waiting', 'yellow')
+            return self._status, colored('waiting', 'yellow')+f""
         elif self._status == TaskStatus.RUNNING:
             return self._status, colored('running', 'yellow')
         elif self._status == TaskStatus.FINISHED:
@@ -133,18 +141,25 @@ class Task:
             return self._status, colored('skipped', 'green')
         elif self._status == TaskStatus.FAILED:
             return self._status, colored('failed', 'red')
+        elif self._status == TaskStatus.DEPFAILED:
+            return self._status, colored('dependency failed', 'red')
         else:
             return self._status, colored('unknown', 'red')
 
     @property
     def is_in_terminal_state(self):
-        return self._status in [TaskStatus.FINISHED, TaskStatus.FAILED, TaskStatus.SKIPPED]
+        return self._status in [TaskStatus.FINISHED, TaskStatus.FAILED, TaskStatus.SKIPPED, TaskStatus.DEPFAILED]
 
     @property
-    def is_successfully_terminated(self):
+    def is_in_successful_terminal_state(self):
         return self._status in [TaskStatus.FINISHED, TaskStatus.SKIPPED]
 
+    @property
+    def is_in_failed_terminal_state(self):
+        return self._status  in [TaskStatus.FAILED, TaskStatus.DEPFAILED]
 
+    def set_to_depfailed(self):
+        self._status = TaskStatus.DEPFAILED
 
 
 __all__ = [Task, Product, Dependency]

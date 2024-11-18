@@ -58,59 +58,69 @@ class TaskHandler:
         self._solve_order()
         submitted_tasks: Set[Task] = set()
 
-        def _submit_task(task: Task) -> None:
+        def _submit_task(task: Task) -> bool:
             if task in submitted_tasks: return
 
             all_dependencies_are_available = True
+            is_set_to_depfailed_called = False
 
-            # Execute all dependencies first
-            for dependency in task.dependencies_hard:
-                assert isinstance(dependency, Task)
-                _submit_task(dependency)
-                if not dependency.is_successfully_terminated:
+            # Execute and check all dependencies first
+            task_dependencies = filter(lambda x: isinstance(x, Task), task.dependencies_hard + task.dependencies_soft)
+            path_dependencies = filter(lambda x: isinstance(x, pathlib.Path), task.dependencies_soft)
+
+            for task_dependency in task_dependencies:
+                assert isinstance(task_dependency, Task)
+                _submit_task(task_dependency)
+                if not task_dependency.is_in_successful_terminal_state:
                     all_dependencies_are_available = False
+                if task_dependency.is_in_failed_terminal_state:
+                    if not task.is_in_failed_terminal_state: # If the task is not already in failed state:
+                        task.set_to_depfailed() # set to depfailed
+                        is_set_to_depfailed_called = True # Remember that we propagated dependency failures
 
-            for dependency in task.dependencies_soft:
-                if isinstance(dependency, Task):
-                    _submit_task(dependency)
-                    if not dependency.is_successfully_terminated:
-                        all_dependencies_are_available = False
-                else:
-                    assert isinstance(dependency, pathlib.Path)
-                    if not dependency.exists():
-                        all_dependencies_are_available = False
+            for path_dependency in path_dependencies:
+                assert isinstance(path_dependency, pathlib.Path)
+                if not path_dependency.exists():
+                    all_dependencies_are_available = False
+                    if not task.is_in_failed_terminal_state: # If the task is not already in failed state:
+                        task.set_to_depfailed() # set to depfailed
+                        is_set_to_depfailed_called = True # Remember that we propagated dependency failures
 
-            # Execute the task
+            # Execute the task if all dependencies are given
             if all_dependencies_are_available:
                 self.depioExecutor.submit(task)
                 submitted_tasks.add(task)
 
+            return is_set_to_depfailed_called
 
         while True:
             # Iterate over all tasks in the queue
-            for task in self.tasks:
-                try:
-                    _submit_task(task)
-                except DependencyNotMetException as e:
-                    print(e)
-                    print("Stopping execution bc of missing dependency!")
-                    exit(1)
-                except ProductNotProducedException as e:
-                    print(e)
-                    print("Stopping execution bc of not produced product!")
-                    exit(1)
-                except KeyboardInterrupt:
-                    print("Stopping execution bc of keyboard interrupt!")
-                    exit(1)
+            is_set_to_depfailed_called = True
+            while is_set_to_depfailed_called:
+                is_set_to_depfailed_called = False
+                for task in self.tasks:
+                    try:
+                        if _submit_task(task):
+                            is_set_to_depfailed_called = True
+                    except DependencyNotMetException as e:
+                        print(e)
+                        print("Stopping execution bc of missing dependency!")
+                        exit(1)
+                    except ProductNotProducedException as e:
+                        print(e)
+                        print("Stopping execution bc of not produced product!")
+                        exit(1)
+                    except KeyboardInterrupt:
+                        print("Stopping execution bc of keyboard interrupt!")
+                        exit(1)
 
             # Check the status of all tasks
             all_tasks_in_terminal_state = all(task.is_in_terminal_state for task in self.tasks)
             try:
+                self._visualize_tasks()
                 if all_tasks_in_terminal_state:
-                    self._visualize_tasks()
-                    break
-                else:
-                    self._visualize_tasks()
+                    if any(task.is_in_failed_terminal_state for task in self.tasks):
+                        exit(1)
             except KeyboardInterrupt:
                 print("Stopping execution bc of keyboard interrupt!")
                 exit(1)
