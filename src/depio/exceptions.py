@@ -16,7 +16,7 @@ class DependencyNotMetException(Exception):
 class TaskRaisedException(Exception):
     pass
 
-class UnknownStatusException:
+class UnknownStatusException(Exception):
     pass
 
 
@@ -29,3 +29,4 @@ class ProductAlreadyRegisteredException(Exception):
 
 class DependencyNotAvailableException(Exception):
     pass
+

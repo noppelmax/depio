@@ -254,3 +254,5 @@ def disable_proxy():
     sys.__stderr__ = orig___stderr__
     sys.stdout = orig_stdout
     sys.stderr = orig_stderr
+
+__all__ = [redirect, stop_redirect, enable_proxy, disable_proxy]

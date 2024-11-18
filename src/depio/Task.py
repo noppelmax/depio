@@ -7,8 +7,8 @@ from typing import List, Callable, get_origin, Annotated, get_args
 import sys
 from termcolor import colored
 
-import src.depio.stdio_helpers as stdio_helpers
-from src.depio.exceptions import ProductNotProducedException, TaskRaisedException, UnknownStatusException
+from .stdio_helpers import redirect, stop_redirect
+from .exceptions import ProductNotProducedException, TaskRaisedException, UnknownStatusException, ProductNotUpdatedException
 
 
 class Product():
@@ -122,9 +122,9 @@ class Task:
         self._status = TaskStatus.RUNNING
 
         try:
-            self.stdout = stdio_helpers.redirect()
+            self.stdout = redirect()
             self.func(*self.func_args, **self.func_kwargs)
-            stdio_helpers.stop_redirect()
+            stop_redirect()
         except Exception as e:
             self._status = TaskStatus.FAILED
             raise TaskRaisedException(e)
@@ -194,7 +194,7 @@ class Task:
         if self._status == TaskStatus.WAITING:
             ds = [d.queue_id for d in self.task_dependencies if not d.is_in_terminal_state]
             if len(ds) == 0:
-                return self._status, colored('waiting    ', 'blue')
+                return self._status, colored('waiting', 'blue')
             else:
                 return self._status, colored('waiting', 'blue') + f" for {ds}"
         elif self._status == TaskStatus.DEPFAILED:
@@ -204,21 +204,21 @@ class Task:
             else:
                 return self._status, colored('dep. failed', 'red') + f" at {ds}"
         elif self._status == TaskStatus.PENDING:
-            return self._status, colored('pending    ', 'blue')
+            return self._status, colored('pending', 'blue')
         elif self._status == TaskStatus.RUNNING:
-            return self._status, colored('running    ', 'yellow')
+            return self._status, colored('running', 'yellow')
         elif self._status == TaskStatus.FINISHED:
-            return self._status, colored('finished   ', 'green')
+            return self._status, colored('finished', 'green')
         elif self._status == TaskStatus.SKIPPED:
-            return self._status, colored('skipped    ', 'green')
+            return self._status, colored('skipped', 'green')
         elif self._status == TaskStatus.HOLD:
-            return self._status, colored('hold       ', 'white')
+            return self._status, colored('hold', 'white')
         elif self._status == TaskStatus.FAILED:
-            return self._status, colored('failed     ', 'red')
+            return self._status, colored('failed', 'red')
         elif self._status == TaskStatus.CANCELED:
-            return self._status, colored('cancelled  ', 'white')
-        elif self._status == TaskStatus.CANCELED:
-            return self._status, colored('unknown    ', 'white')
+            return self._status, colored('cancelled', 'white')
+        elif self._status == TaskStatus.UNKNOWN:
+            return self._status, colored('unknown', 'white')
         else:
             raise UnknownStatusException("Status {} is unknown....".format(self._status))
 
