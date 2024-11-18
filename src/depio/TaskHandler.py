@@ -2,6 +2,8 @@ from typing import Set
 import pathlib
 import time
 
+from termcolor import colored
+
 from .Task import Task, TaskStatus
 from .Executors import AbstractTaskExecutor
 from .exceptions import ProductAlreadyRegisteredException, TaskNotInQueueException
@@ -119,13 +121,22 @@ class TaskHandler:
                 exit(1)
             time.sleep(0.20)
 
+    def _get_text_for_task(self, task: Task, length, status=None) -> str:
+        if status is None:
+            status = task.status
+
+        s = colored(f"{task.statustext(status[0]):<{length}s}", task.statuscolor(status[0])) # Format into correct length
+
+        return f"{task.id}: {task.name:20s} | {task.slurmid:10s}-{task.slurmjob_status:10s} | {s} | {[str(d) for d in task.path_dependencies]} -> {[str(p) for p in task.products]}"
+
     def _print_tasks(self) -> None:
         print("Tasks: ")
-        for task in self.tasks:
-            print(f"  {task.id}: {task.name:20s} | {task.slurmid:10s}-{task.slurmjob_status:10s} | {task.status[1]:15s} | {[str(d) for d in task.path_dependencies]} -> {[str(p) for p in task.products]}")
-            #print(f"  Task dependencies: {[t for t in task.task_dependencies]}")
-            #print(f"  Path dependencies: {[str(p) for p in task.path_dependencies]}")
-            #print(f"  Products:          {[str(p) for p in task.products]}")
+        # Determine the longest status
+        statuse = [task.status for task in self.tasks]
+        length = max([len(s[1]) for s in statuse])
+
+        for status, task in zip(statuse, self.tasks):
+            print(self._get_text_for_task(task,length,status))
 
     def exit_with_failed_tasks(self) -> None:
         print()

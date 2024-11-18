@@ -183,8 +183,8 @@ class Task:
             return self.slurmjob.state
         else:
             return ""
-    @property
-    def statuscolor(self):
+    def statuscolor(self,s:TaskStatus=None) -> str:
+        if s is None: s = self._status
         status_colors = {
             TaskStatus.WAITING: 'blue',
             TaskStatus.DEPFAILED: 'red',
@@ -197,14 +197,13 @@ class Task:
             TaskStatus.CANCELED: 'white',
             TaskStatus.UNKNOWN: 'white'
         }
-
-        if self._status in status_colors:
-            return status_colors[self._status]
+        if s in status_colors:
+            return status_colors[s]
         else:
-            raise UnknownStatusException("Status {} is unknown.".format(self._status))
+            raise UnknownStatusException("Status {} is unknown.".format(s))
 
-    @property
-    def statustext(self):
+    def statustext(self,s:TaskStatus=None) -> str:
+        if s is None: s = self._status
         status_messages = {
             TaskStatus.WAITING: lambda: 'waiting' + (f" for {[d.queue_id for d in self.task_dependencies if not d.is_in_terminal_state]}" if len(
                 [d for d in self.task_dependencies if not d.is_in_terminal_state]) > 1 else ""),
@@ -220,51 +219,51 @@ class Task:
             TaskStatus.CANCELED: lambda: 'cancelled',
             TaskStatus.UNKNOWN: lambda: 'unknown'
         }
-
         try:
-            return status_messages[self._status]()
+            return status_messages[s]()
         except KeyError:
-            raise UnknownStatusException(f"Status {self._status} is unknown.")
+            raise UnknownStatusException(f"Status {s} is unknown.")
 
     @property
     def status(self):
-        return self._status, colored(self.statustext, self.statuscolor)
+        s = self._status
+        return s, self.statustext(s), self.statuscolor(s)
 
 
     @property
-    def is_in_terminal_state(self):
+    def is_in_terminal_state(self) -> bool:
         return self.status[0] in TERMINAL_STATES
 
     @property
-    def is_in_successful_terminal_state(self):
+    def is_in_successful_terminal_state(self) -> bool:
         return self.status[0] in SUCCESSFUL_TERMINAL_STATES
 
     @property
-    def is_in_failed_terminal_state(self):
+    def is_in_failed_terminal_state(self) -> bool:
         return self.status[0] in FAILED_TERMINAL_STATES
 
-    def set_to_depfailed(self):
+    def set_to_depfailed(self) -> None:
         self.status[0] = TaskStatus.DEPFAILED
 
     @property
-    def id(self):
+    def id(self) -> str:
         return f"{self.queue_id: 4d}"
 
     @property
-    def slurmid(self):
+    def slurmid(self) -> str:
         if not self.slurmjob is None:
             self._update_by_slurmjob()
             return f"{self._slurmid}"
         else:
             return ""
 
-    def stdout(self):
+    def stdout(self) -> str:
         if self.slurmjob:
             return self.slurmjob.stdout()
         else:
             return self.stdout.getvalue()
 
-    def stderr(self):
+    def stderr(self) -> str:
         if self.slurmjob:
             return self.slurmjob.stderr()
         else:
