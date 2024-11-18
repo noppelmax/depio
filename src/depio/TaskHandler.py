@@ -1,8 +1,9 @@
 from typing import Set
 import pathlib
+import time
 
 from .Task import Task, DependencyNotMetException, ProductNotProducedException
-from .Executors import TaskExecutor
+from .Executors import AbstractTaskExecutor
 
 
 class TaskNotInQueueException(Exception):
@@ -15,7 +16,7 @@ class DependencyNotAvailableException(Exception):
     pass
 
 class TaskHandler:
-    def __init__(self, executor: TaskExecutor):
+    def __init__(self, executor: AbstractTaskExecutor):
         self.tasks = []
         self.executor = executor
         self.registered_products = []
@@ -88,6 +89,25 @@ class TaskHandler:
                 print(e)
                 print("Stopping execution bc of not produced product!")
                 exit(1)
+
+        self.executor.wait_for_all()
+
+        while True:
+            try:
+                self._visualize_tasks()
+            except KeyboardInterrupt:
+                print("Stopping execution bc of keyboard interrupt!")
+                exit(1)
+
+            time.sleep(1)
+
+    def _visualize_tasks(self) -> None:
+        print()
+        for task in self.tasks:
+            print(f"Task: {task.name}   {task.status[1]}")
+            #print(f"  Hard dependencies: {[str(dep) for dep in task.dependencies_hard]}")
+            #print(f"  Soft dependencies: {[str(dep) for dep in task.dependencies_soft]}")
+            #print(f"  Products:          {[str(p) for p in task.products]}")
 
 
 __all__ = [TaskHandler]

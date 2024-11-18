@@ -1,6 +1,6 @@
 import unittest
 
-from src.depio.Task import _get_args_dict
+from depio.Task import _get_args_dict
 
 
 class TestGetArgsDict(unittest.TestCase):
