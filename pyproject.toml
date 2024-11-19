@@ -6,11 +6,18 @@ authors = [
 ]
 description = "A simple task manager."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+]
+dependencies = [
+    "tabulate",
+    "pytest",
+    "submitit",
+    "coverage",
+    "hydra-core"
 ]
 
 [tool.pytest.ini_options]
