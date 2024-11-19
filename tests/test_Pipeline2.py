@@ -24,7 +24,7 @@ class PathMock():
 
 @pytest.fixture
 def pipeline():
-    return Pipeline(None, False)
+    return Pipeline(None, False, quiet=True)
 
 
 def test_solve_order_no_dependency(pipeline):

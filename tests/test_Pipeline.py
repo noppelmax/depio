@@ -6,7 +6,7 @@ from depio.Task import Task
 
 @pytest.fixture
 def pipeline():
-    return Pipeline(None, False)
+    return Pipeline(None, False, quiet=True)
 
 def dummyfunc(self):
     pass

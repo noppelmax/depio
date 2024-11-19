@@ -14,14 +14,15 @@ from .exceptions import ProductAlreadyRegisteredException, TaskNotInQueueExcepti
 
 
 class Pipeline:
-    def __init__(self, depioExecutor: AbstractTaskExecutor, name: str = "NONAME", clear_screen: bool = True):
+    def __init__(self, depioExecutor: AbstractTaskExecutor, name: str = "NONAME", clear_screen: bool = True, quiet: bool = False,):
         self.CLEAR_SCREEN: bool = clear_screen
+        self.QUIET: bool = quiet
         self.name: str = name
         self.submitted_tasks: Set[Task] = None
         self.tasks: List[Task] = []  # A list because we want to keep the order
         self.depioExecutor: AbstractTaskExecutor = depioExecutor
         self.registered_products: Set[Path] = set()
-        print("Pipeline initialized")
+        if not self.QUIET: print("Pipeline initialized")
 
     def add_task(self, task: Task) -> None:
         # Check is a product is already registered
@@ -115,7 +116,7 @@ class Pipeline:
 
                 # Check the status of all tasks
                 all_tasks_in_terminal_state = all(task.is_in_terminal_state for task in self.tasks)
-                self._print_tasks()
+                if not self.QUIET: self._print_tasks()
                 if all_tasks_in_terminal_state:
                     if any(task.is_in_failed_terminal_state for task in self.tasks):
                         self.exit_with_failed_tasks()
