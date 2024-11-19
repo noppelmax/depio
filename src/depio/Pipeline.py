@@ -14,9 +14,14 @@ from .exceptions import ProductAlreadyRegisteredException, TaskNotInQueueExcepti
 
 
 class Pipeline:
-    def __init__(self, depioExecutor: AbstractTaskExecutor, name: str = "NONAME", clear_screen: bool = True, quiet: bool = False,):
+    def __init__(self, depioExecutor: AbstractTaskExecutor, name: str = "NONAME",
+                 clear_screen: bool = True,
+                 quiet: bool = False,
+                 refreshrate: float = 1.0):
         self.CLEAR_SCREEN: bool = clear_screen
         self.QUIET: bool = quiet
+        self.REFRESHRATE: float = refreshrate
+
         self.name: str = name
         self.submitted_tasks: Set[Task] = None
         self.tasks: List[Task] = []  # A list because we want to keep the order
@@ -126,7 +131,7 @@ class Pipeline:
             except KeyboardInterrupt:
                 print("Stopping execution bc of keyboard interrupt!")
                 exit(1)
-            time.sleep(0.20)
+            time.sleep(self.REFRESHRATE)
 
     def _get_text_for_task(self, task):
         status = task.status
