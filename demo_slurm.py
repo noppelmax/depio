@@ -28,10 +28,10 @@ internal_executor.update_parameters(
 )
 
 depioExecutor = SubmitItExecutor(internal_executor=internal_executor)
-taskhandler = Pipeline(depioExecutor=depioExecutor)
+defaultpipeline = Pipeline(depioExecutor=depioExecutor)
 
 # Use the decorator with args and kwargs
-@task("datapipeline", taskhandler)
+@task("datapipeline")
 def funcdec(input: Annotated[pathlib.Path, Dependency],
             output: Annotated[pathlib.Path, Product],
             sec:int
@@ -43,7 +43,7 @@ def funcdec(input: Annotated[pathlib.Path, Dependency],
 
 
 
-funcdec(BLD/"output.txt", BLD/"final.txt",sec=4)
-funcdec(BLD/"input.txt", BLD/"output.txt",sec=5)
+defaultpipeline.add_task(funcdec(BLD/"output.txt", BLD/"final.txt",sec=4))
+defaultpipeline.add_task(funcdec(BLD/"input.txt", BLD/"output.txt",sec=5))
 
-taskhandler.run()
+defaultpipeline.run()
