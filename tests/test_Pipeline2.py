@@ -2,7 +2,7 @@
 import pathlib
 
 import pytest
-from src.depio.Pipeline import Pipeline, Task, DependencyNotAvailableException
+from depio.Pipeline import Pipeline, Task, DependencyNotAvailableException
 
 
 class TaskMock(Task):
