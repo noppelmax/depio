@@ -6,8 +6,8 @@ from depio.Pipeline import Pipeline, Task, DependencyNotAvailableException
 
 
 class TaskMock(Task):
-    def __init__(self, path_dependencies=[], products=[]):
-        self.path_dependencies = path_dependencies
+    def __init__(self, dependencies=[], products=[]):
+        self.dependencies = dependencies
         self.products = products
         self.task_dependencies = []
 

@@ -28,7 +28,7 @@ class Pipeline:
                 f"The product\s {products_already_registered} is/are already registered. Each output can only be registered from one task.")
 
         # Check if the task dependencies are registered already
-        if any(True for t in task.task_dependencies if t not in self.tasks):
+        if any(True for t in task.dependencies if isinstance(t, Task) and t not in self.tasks):
             raise TaskNotInQueueException("Add the tasks into the queue in the correct order.")
 
         # Register products
@@ -45,13 +45,14 @@ class Pipeline:
         # Add the dependencies to the tasks
         for task in self.tasks:
             # Verify that each dependency is available and add if yes.
-            unavailable_dependencies = [d for d in task.path_dependencies
-                                        if d not in product_to_task and not d.exists()]
+            unavailable_dependencies = [d for d in task.dependencies
+                                        if d not in self.tasks and d not in product_to_task and not d.exists()]
             if len(unavailable_dependencies) > 0:
                 raise DependencyNotAvailableException(f"Dependency/ies '{unavailable_dependencies}' do/es not exist and can not be produced.")
 
-            # Generate the tasks which generate dependencies
-            task.task_dependencies.extend([(product_to_task[d] if d in product_to_task else d) for d in task.path_dependencies])
+            # Add the tasks that produce path_deps and remove such deps from the path_deps
+            task.task_dependencies = [product_to_task[d] for d in task.dependencies if d in product_to_task]
+            task.path_dependencies = [d for d in task.dependencies if d not in product_to_task]
 
     def _submit_task(self, task: Task) -> bool:
         """
@@ -132,7 +133,8 @@ class Pipeline:
             task.slurmid,
             formatted_slurmstatus,
             formatted_status,
-            [str(d) for d in task.path_dependencies],
+            [t.queue_id for t in task.task_dependencies],
+            [str(d) for d in task.dependencies if isinstance(d, pathlib.Path)],
             [str(p) for p in task.products]
         ]
 
@@ -146,7 +148,7 @@ class Pipeline:
 
     def _print_tasks(self):
         self._clear_screen()
-        headers = ["ID", "Name", "Slurm ID", "Slurm Job Status", "Formatted Status", "Path Dependencies", "Products"]
+        headers = ["ID", "Name", "Slurm ID", "Slurm Status", "Status", "Task Deps.", "Path Deps.", "Products"]
         tasks_data = []
         statuse = [task.status for task in self.tasks]
         length = max([len(s[1]) for s in statuse])  # Assuming the first element in the status is the text length

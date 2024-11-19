@@ -3,8 +3,10 @@ from __future__ import annotations
 import pathlib
 import typing
 from os.path import getmtime
-from typing import List, Callable, get_origin, Annotated, get_args, Union
+from typing import List, Dict, Callable, get_origin, Annotated, get_args, Union
 import sys
+
+from nltk.corpus import dependency_treebank
 
 from .TaskStatus import TaskStatus, TERMINAL_STATES, SUCCESSFUL_TERMINAL_STATES, FAILED_TERMINAL_STATES
 from .stdio_helpers import redirect, stop_redirect
@@ -87,22 +89,23 @@ def _get_not_updated_products(product_timestamps_after_running: typing.Dict, pro
 class Task:
     def __init__(self, name: str, func: Callable, func_args: List = None, func_kwargs: List = None,
                  produces: List[pathlib.Path] = None, depends_on: List[Union[pathlib.Path, Task]] = None):
+        produces = produces if produces is not None else []
+        depends_on = depends_on if depends_on is not None else []
+
         self._status: TaskStatus = TaskStatus.WAITING
-        self.name = name
+        self.name: str = name
         self.queue_id: int = None
         self.slurmjob = None
         self.func = func
-        self.func_args = func_args or []
-        self.func_kwargs = func_kwargs or {}
-        self.task_dependencies = list(filter(lambda x: isinstance(x, Task), depends_on)) if depends_on else []
+        self.func_args: List = func_args or []
+        self.func_kwargs: Dict = func_kwargs or {}
 
         # Parse dependencies and products from the annotations and merge with args
         self.products_args = _parse_annotation_for_metaclass(func, Product)
         self.dependencies_args = _parse_annotation_for_metaclass(func, Dependency)
         args_dict = _get_args_dict(func, self.func_args, self.func_kwargs)
-        self.products = ([args_dict[argname] for argname in self.products_args] + produces if produces else [])
-        self.path_dependencies = ([args_dict[argname] for argname in self.dependencies_args]
-                                  + list(filter(lambda x: isinstance(x, pathlib.Path), depends_on)) if depends_on else [])
+        self.products : List[pathlib.Path] = [args_dict[argname] for argname in self.products_args] + produces
+        self.dependencies: List[Union[Task,pathlib.Path]] = [args_dict[argname] for argname in self.dependencies_args] + depends_on
 
         self._stdout = None
         self._stderr = None
