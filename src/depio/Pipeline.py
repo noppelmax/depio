@@ -151,12 +151,7 @@ class Pipeline:
         ]
 
     def _clear_screen(self):
-        if not self.CLEAR_SCREEN: return
-
-        # ANSI escape code to clear the screen
-        sys.stdout.write("\033[2J")
-        # ANSI escape code to move the cursor to the top left (1,1)
-        sys.stdout.write("\033[H")
+        if self.CLEAR_SCREEN: sys.stdout.write("\033[2J\033[H")
 
     def _print_tasks(self):
         self._clear_screen()
