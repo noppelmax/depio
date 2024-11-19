@@ -154,7 +154,7 @@ class Task:
             return self.slurmjob.state
         else:
             return ""
-    def statuscolor(self,s:TaskStatus=None) -> str:
+    def statuscolor(self, s: TaskStatus =None) -> str:
         if s is None: s = self._status
         status_colors = {
             TaskStatus.WAITING: 'blue',
@@ -173,7 +173,7 @@ class Task:
         else:
             raise UnknownStatusException("Status {} is unknown.".format(s))
 
-    def statustext(self,s:TaskStatus=None) -> str:
+    def statustext(self, s: TaskStatus =None) -> str:
         if s is None: s = self._status
         status_messages = {
             TaskStatus.WAITING: lambda: 'waiting' + (f" for {[d.queue_id for d in self.task_dependencies if not d.is_in_terminal_state]}" if len(

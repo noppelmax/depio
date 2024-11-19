@@ -1,10 +1,10 @@
 from .Task import Task
-from .TaskHandler import TaskHandler
+from .Pipeline import Pipeline
 
 
 
 
-def task(name : str, taskhandler : TaskHandler, *dec_args, **dec_kwargs):
+def task(name : str, taskhandler : Pipeline, *dec_args, **dec_kwargs):
     def wrapper(func):
         def decorator(*func_args, **func_kwargs):
             # Create and add the task

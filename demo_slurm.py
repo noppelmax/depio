@@ -5,7 +5,7 @@ import submitit
 import time
 
 from depio.Executors import SubmitItExecutor
-from depio.TaskHandler import TaskHandler
+from depio.Pipeline import Pipeline
 from depio.decorators import task
 from depio.Task import Product, Dependency
 
@@ -28,7 +28,7 @@ internal_executor.update_parameters(
 )
 
 depioExecutor = SubmitItExecutor(internal_executor=internal_executor)
-taskhandler = TaskHandler(depioExecutor=depioExecutor)
+taskhandler = Pipeline(depioExecutor=depioExecutor)
 
 # Use the decorator with args and kwargs
 @task("datapipeline", taskhandler)

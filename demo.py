@@ -3,7 +3,7 @@ import pathlib
 import time
 
 from depio.Executors import DemoTaskExecutor
-from depio.TaskHandler import TaskHandler
+from depio.Pipeline import Pipeline
 from depio.decorators import task
 from depio.Task import Product, Dependency
 
@@ -15,7 +15,7 @@ stdio_helpers.enable_proxy()
 depioExecutor = DemoTaskExecutor()
 depioExecutor = ParallelExecutor()
 
-defaultpipeline = TaskHandler(depioExecutor=depioExecutor)
+defaultpipeline = Pipeline(depioExecutor=depioExecutor)
 
 # Use the decorator with args and kwargs
 @task("datapipeline", defaultpipeline)
