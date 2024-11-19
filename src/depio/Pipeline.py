@@ -159,6 +159,7 @@ class Pipeline:
             tasks_data.append(self._get_text_for_task(task))
 
         table_str = tabulate(tasks_data, headers=headers, tablefmt="plain")
+        print()
         print("Tasks:")
         print(table_str)
 
