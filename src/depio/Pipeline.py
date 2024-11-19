@@ -156,10 +156,7 @@ class Pipeline:
     def _print_tasks(self):
         self._clear_screen()
         headers = ["ID", "Name", "Slurm ID", "Slurm Status", "Status", "Task Deps.", "Path Deps.", "Products"]
-        tasks_data = []
-        for task in self.tasks:
-            tasks_data.append(self._get_text_for_task(task))
-
+        tasks_data = [self._get_text_for_task(task) for task in self.tasks]
         table_str = tabulate(tasks_data, headers=headers, tablefmt="plain")
         print()
         print("Tasks:")
