@@ -19,6 +19,20 @@ class Dependency():
     pass
 
 
+status_colors = {
+    TaskStatus.WAITING: 'blue',
+    TaskStatus.DEPFAILED: 'red',
+    TaskStatus.PENDING: 'blue',
+    TaskStatus.RUNNING: 'yellow',
+    TaskStatus.FINISHED: 'green',
+    TaskStatus.SKIPPED: 'green',
+    TaskStatus.HOLD: 'white',
+    TaskStatus.FAILED: 'red',
+    TaskStatus.CANCELED: 'white',
+    TaskStatus.UNKNOWN: 'white'
+}
+
+
 def python_version_is_greater_equal_3_10():
     return sys.version_info.major > 3 and sys.version_info.minor >= 10
 
@@ -71,10 +85,10 @@ def _get_not_updated_products(product_timestamps_after_running: typing.Dict, pro
 
 class Task:
     def __init__(self, name: str, func: Callable, dependencies_hard: List[Task] = None, func_args: List = None, func_kwargs: List = None, ):
+        self._status: TaskStatus = TaskStatus.WAITING
         self.name = name
         self.queue_id = None
         self.slurmjob = None
-        self._status: TaskStatus = TaskStatus.WAITING
         self.func = func
         self.func_args = func_args or []
         self.func_kwargs = func_kwargs or {}
@@ -173,18 +187,6 @@ class Task:
 
     def statuscolor(self, s: TaskStatus = None) -> str:
         if s is None: s = self._status
-        status_colors = {
-            TaskStatus.WAITING: 'blue',
-            TaskStatus.DEPFAILED: 'red',
-            TaskStatus.PENDING: 'blue',
-            TaskStatus.RUNNING: 'yellow',
-            TaskStatus.FINISHED: 'green',
-            TaskStatus.SKIPPED: 'green',
-            TaskStatus.HOLD: 'white',
-            TaskStatus.FAILED: 'red',
-            TaskStatus.CANCELED: 'white',
-            TaskStatus.UNKNOWN: 'white'
-        }
         if s in status_colors:
             return status_colors[s]
         else:
