@@ -10,8 +10,6 @@ from depio.Task import Product, Dependency
 from src.depio.Executors import ParallelExecutor
 from src.depio import stdio_helpers
 
-stdio_helpers.enable_proxy()
-
 depioExecutor = DemoTaskExecutor()
 depioExecutor = ParallelExecutor()
 
