@@ -56,7 +56,7 @@ class LocalProxy:
     __slots__ = ("__local", "__dict__", "__name__", "__wrapped__")
 
     def __init__(
-        self, local: Union[Any, "LocalProxy", "LocalStack"], name: Optional[str] = None,
+        self, local: Union[Any, "LocalProxy"], name: Optional[str] = None,
     ) -> None:
         object.__setattr__(self, "_LocalProxy__local", local)
         object.__setattr__(self, "__name__", name)
