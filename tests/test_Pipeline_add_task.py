@@ -24,10 +24,11 @@ def test_add_task_duplicated_task(pipeline):
 
 def test_add_task_duplicate_producing_task(pipeline):
     producing_task = Task("producing_task", dummyfunc, produces=[pathlib.Path("test.txt")])
+    producing_task2 = Task("producing_task2", dummyfunc, produces=[pathlib.Path("test.txt")])
     pipeline.add_task(producing_task)
     assert producing_task in pipeline.tasks
     with pytest.raises(ProductAlreadyRegisteredException):
-        pipeline.add_task(producing_task)
+        pipeline.add_task(producing_task2)
 
 def test_add_task_unregistered_dependency(pipeline):
     task1 = Task("task1", dummyfunc)

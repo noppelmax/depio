@@ -1,7 +1,8 @@
-# test_Pipeline2.py
 import pathlib
 
 import pytest
+from pathlib import Path
+
 from depio.Pipeline import Pipeline, Task, DependencyNotAvailableException
 
 
@@ -15,16 +16,16 @@ class TaskMock(Task):
         self.products = products
         self.task_dependencies = []
 
-class PathMock():
-    def __init__(self, name, exists=True):
-        self.name : str = name
-        self._exists : bool = exists
+class PathMock(Path):
+    _flavour = type(Path())._flavour
+
+    def __init__(self, name: str, exists: bool = True):
+        # Skip the `Path`'s __init__ method
+        self._exists = exists
 
     def exists(self) -> bool:
         return self._exists
 
-    def __str__(self) -> str:
-        return self.name
 
 @pytest.fixture
 def pipeline():
@@ -39,7 +40,7 @@ def test_solve_order_no_dependency(pipeline):
     pipeline.add_task(task_A)
     pipeline._solve_order()
 
-    assert frozenset(task_A.task_dependencies) == frozenset()
+    assert task_A.task_dependencies == []
 
 
 def test_solve_order_single_dependency(pipeline):
@@ -52,7 +53,7 @@ def test_solve_order_single_dependency(pipeline):
     pipeline.add_task(task_B)
     pipeline._solve_order()
 
-    assert frozenset(task_B.task_dependencies) == frozenset([task_A])
+    assert task_B.task_dependencies == [task_A]
 
 
 def test_solve_order_multiple_dependencies(pipeline):
