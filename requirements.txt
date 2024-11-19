@@ -1,0 +1,6 @@
+tabulate
+pytest
+submitit
+coverage
+hydra-core
+termcolo
