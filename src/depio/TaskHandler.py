@@ -3,6 +3,7 @@ import pathlib
 import time
 
 from termcolor import colored
+from tabulate import tabulate
 
 from .Task import Task, TaskStatus
 from .Executors import AbstractTaskExecutor
@@ -121,22 +122,32 @@ class TaskHandler:
                 exit(1)
             time.sleep(0.20)
 
-    def _get_text_for_task(self, task: Task, length, status=None) -> str:
+    def _get_text_for_task(self, task: Task, length, status=None) -> list:
         if status is None:
             status = task.status
-
-        s = colored(f"{task.statustext(status[0]):<{length}s}", task.statuscolor(status[0])) # Format into correct length
-
-        return f"{task.id}: {task.name:20s} | {task.slurmid:10s}-{task.slurmjob_status:10s} | {s} | {[str(d) for d in task.path_dependencies]} -> {[str(p) for p in task.products]}"
+        formatted_status = colored(f"{task.statustext(status[0]):<{length}s}", task.statuscolor(status[0]))
+        return [
+            task.id,
+            task.name,
+            task.slurmid,
+            task.slurmjob_status,
+            formatted_status,
+            [str(d) for d in task.path_dependencies],
+            [str(p) for p in task.products]
+        ]
 
     def _print_tasks(self) -> None:
-        print("Tasks: ")
-        # Determine the longest status
+        headers = ["ID", "Name", "Slurm ID", "Slurm Job Status", "Formatted Status", "Path Dependencies", "Products"]
+        tasks_data = []
+
         statuse = [task.status for task in self.tasks]
         length = max([len(s[1]) for s in statuse])
 
         for status, task in zip(statuse, self.tasks):
-            print(self._get_text_for_task(task,length,status))
+            tasks_data.append(self._get_text_for_task(task, length, status))
+
+        print("Tasks:")
+        print(tabulate(tasks_data, headers=headers))
 
     def exit_with_failed_tasks(self) -> None:
         print()
@@ -147,10 +158,10 @@ class TaskHandler:
                 print("--------------------------------------------------------------------")
                 print(f"  {task.id}: {task.name:20s} | {task.slurmid:10s} | {task.status[1]:15s}")
                 print("------ STDOUT ------------------------------------------------------")
-                print(task.stdout())
-                if task.stderr() != "":
+                print(task.stdout)
+                if task.stderr != "":
                     print("------ STDERR ------------------------------------------------------")
-                    print(task.stderr())
+                    print(task.stderr)
 
         print("--------------------------------------------------------------------")
 

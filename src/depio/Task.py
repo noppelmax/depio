@@ -109,6 +109,11 @@ class Task:
         self.products = [args_dict[argname] for argname in self.products_args]
         self.dependencies = [args_dict[argname] for argname in self.dependencies_args]
 
+        self._stdout = None
+        self._stderr = None
+        self.slurmjob = None
+        self._slurmid = None
+
     def run(self):
         d = [str(dependency) for dependency in self.dependencies if dependency.exists()]
         if any(not b for b in d):
@@ -122,7 +127,7 @@ class Task:
         self._status = TaskStatus.RUNNING
 
         try:
-            self.stdout = redirect()
+            self._stdout = redirect()
             self.func(*self.func_args, **self.func_kwargs)
             stop_redirect()
         except Exception as e:
@@ -243,7 +248,7 @@ class Task:
         return self.status[0] in FAILED_TERMINAL_STATES
 
     def set_to_depfailed(self) -> None:
-        self.status[0] = TaskStatus.DEPFAILED
+        self._status = TaskStatus.DEPFAILED
 
     @property
     def id(self) -> str:
@@ -257,17 +262,23 @@ class Task:
         else:
             return ""
 
+    @property
     def stdout(self) -> str:
         if self.slurmjob:
             return self.slurmjob.stdout()
+        elif not self._stdout is None:
+            return self._stdout.getvalue()
         else:
-            return self.stdout.getvalue()
+            return ""
 
+    @property
     def stderr(self) -> str:
         if self.slurmjob:
             return self.slurmjob.stderr()
+        elif not self._stderr is None:
+            return self._stderr.getvalue()
         else:
-            return self.stderr.getvalue()
+            return ""
 
 
 __all__ = [Task, Product, Dependency]
