@@ -1,4 +1,4 @@
-from typing import Set, Dict
+from typing import Set, Dict, List
 import pathlib
 from pathlib import Path
 import time
@@ -13,24 +13,24 @@ from .exceptions import ProductAlreadyRegisteredException, TaskNotInQueueExcepti
 
 
 class Pipeline:
-    def __init__(self, depioExecutor: AbstractTaskExecutor, name : str = "NONAME", clear_screen: bool = True):
+    def __init__(self, depioExecutor: AbstractTaskExecutor, name: str = "NONAME", clear_screen: bool = True):
         self.CLEAR_SCREEN: bool = clear_screen
-        self.name : str = name
-        self.submitted_tasks :Set[Task] = None
-        self.tasks :List[Task] = []
-        self.depioExecutor = depioExecutor
-        self.registered_products :Set[Path] = set()
+        self.name: str = name
+        self.submitted_tasks: Set[Task] = None
+        self.tasks: List[Task] = []  # A list because we want to keep the order
+        self.depioExecutor: AbstractTaskExecutor = depioExecutor
+        self.registered_products: Set[Path] = set()
         print("Pipeline initialized")
 
-    def add_task(self, task) -> None:
+    def add_task(self, task: Task) -> None:
         # Check is a product is already registered
-        products_already_registered = [str(p) for p in task.products if str(p) in set(map(str, self.registered_products))]
+        products_already_registered: List[str] = [str(p) for p in task.products if str(p) in set(map(str, self.registered_products))]
         if len(products_already_registered) > 0:
             raise ProductAlreadyRegisteredException(
                 f"The product\s {products_already_registered} is/are already registered. Each output can only be registered from one task.")
 
         # Check if the task dependencies are registered already
-        missing_tasks = [t for t in task.dependencies if isinstance(t, Task) and t not in self.tasks]
+        missing_tasks: List[Task] = [t for t in task.dependencies if isinstance(t, Task) and t not in self.tasks]
         if len(missing_tasks) > 0:
             raise TaskNotInQueueException("Add the tasks into the queue in the correct order. The following task/s is/are missing: {missing_tasks}.")
 
