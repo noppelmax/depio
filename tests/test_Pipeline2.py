@@ -35,7 +35,7 @@ def test_solve_order_no_dependency(pipeline):
     pipeline.add_task(task_A)
     pipeline._solve_order()
 
-    assert task_A.task_dependencies == []
+    assert task_A.task_dependencies == set()
 
 
 def test_solve_order_single_dependency(pipeline):
@@ -48,7 +48,7 @@ def test_solve_order_single_dependency(pipeline):
     pipeline.add_task(task_B)
     pipeline._solve_order()
 
-    assert task_B.task_dependencies == [task_A]
+    assert task_B.task_dependencies == set([task_A])
 
 
 def test_solve_order_multiple_dependencies(pipeline):

@@ -1,5 +1,6 @@
 from typing import Set, Dict
 import pathlib
+from pathlib import Path
 import time
 import sys
 from termcolor import colored
@@ -12,27 +13,29 @@ from .exceptions import ProductAlreadyRegisteredException, TaskNotInQueueExcepti
 
 
 class Pipeline:
-    def __init__(self, depioExecutor: AbstractTaskExecutor, clear_screen: bool = True):
+    def __init__(self, depioExecutor: AbstractTaskExecutor, name : str = "NONAME", clear_screen: bool = True):
         self.CLEAR_SCREEN: bool = clear_screen
-        self.submitted_tasks = None
-        self.tasks = []
+        self.name : str = name
+        self.submitted_tasks :Set[Task] = None
+        self.tasks :List[Task] = []
         self.depioExecutor = depioExecutor
-        self.registered_products = []
-        print("depio-TaskHandler initialized")
+        self.registered_products :Set[Path] = set()
+        print("Pipeline initialized")
 
     def add_task(self, task) -> None:
-        # Check is a output is already registered
+        # Check is a product is already registered
         products_already_registered = [str(p) for p in task.products if str(p) in set(map(str, self.registered_products))]
         if len(products_already_registered) > 0:
             raise ProductAlreadyRegisteredException(
                 f"The product\s {products_already_registered} is/are already registered. Each output can only be registered from one task.")
 
         # Check if the task dependencies are registered already
-        if any(True for t in task.dependencies if isinstance(t, Task) and t not in self.tasks):
-            raise TaskNotInQueueException("Add the tasks into the queue in the correct order.")
+        missing_tasks = [t for t in task.dependencies if isinstance(t, Task) and t not in self.tasks]
+        if len(missing_tasks) > 0:
+            raise TaskNotInQueueException("Add the tasks into the queue in the correct order. The following task/s is/are missing: {missing_tasks}.")
 
         # Register products
-        self.registered_products.extend(task.products)
+        self.registered_products.update(task.products)
 
         # Register task
         self.tasks.append(task)
@@ -51,8 +54,8 @@ class Pipeline:
                 raise DependencyNotAvailableException(f"Dependency/ies '{unavailable_dependencies}' do/es not exist and can not be produced.")
 
             # Add the tasks that produce path_deps and remove such deps from the path_deps
-            task.task_dependencies = [product_to_task[d] for d in task.dependencies if d in product_to_task]
-            task.path_dependencies = [d for d in task.dependencies if d not in product_to_task]
+            task.task_dependencies = set([product_to_task[d] for d in task.dependencies if d in product_to_task])
+            task.path_dependencies = set([d for d in task.dependencies if d not in product_to_task])
 
     def _submit_task(self, task: Task) -> bool:
         """
@@ -80,7 +83,7 @@ class Pipeline:
                 is_new_depfail_found = True  # Remember that we propagated dependency failures
 
         for p_dep in task.path_dependencies:
-            assert isinstance(p_dep, pathlib.Path)
+            assert isinstance(p_dep, Path)
             if not p_dep.exists():
                 all_dependencies_are_available = False
 
@@ -133,7 +136,7 @@ class Pipeline:
             formatted_slurmstatus,
             formatted_status,
             [t.queue_id for t in task.task_dependencies],
-            [str(d) for d in task.dependencies if isinstance(d, pathlib.Path)],
+            [str(d) for d in task.dependencies if isinstance(d, Path)],
             [str(p) for p in task.products]
         ]
 
