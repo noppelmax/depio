@@ -121,11 +121,10 @@ class Pipeline:
                 exit(1)
             time.sleep(0.20)
 
-    def _get_text_for_task(self, task, length, status=None):
-        if status is None:
-            status = task.status
+    def _get_text_for_task(self, task):
+        status = task.status
 
-        formatted_status = colored(f"{task.statustext(status[0]).upper():<{length}s}", task.statuscolor(status[0]))
+        formatted_status = colored(f"{task.statustext(status[0]).upper()}", task.statuscolor(status[0]))
         formatted_slurmstatus = colored(f"{task.slurmjob_status:<{len('OUT_OF_MEMORY')}s}", task.statuscolor(status[0]))
         return [
             task.id,
@@ -150,10 +149,8 @@ class Pipeline:
         self._clear_screen()
         headers = ["ID", "Name", "Slurm ID", "Slurm Status", "Status", "Task Deps.", "Path Deps.", "Products"]
         tasks_data = []
-        statuse = [task.status for task in self.tasks]
-        length = max([len(s[1]) for s in statuse])  # Assuming the first element in the status is the text length
-        for status, task in zip(statuse, self.tasks):
-            tasks_data.append(self._get_text_for_task(task, length, status))
+        for task in self.tasks:
+            tasks_data.append(self._get_text_for_task(task))
 
         table_str = tabulate(tasks_data, headers=headers, tablefmt="plain")
         print("Tasks:")
@@ -168,7 +165,6 @@ class Pipeline:
 
         if failed_tasks:
             headers = ["Task ID", "Name", "Slurm ID", "Status"]
-            print("--------------------------------------------------------------------")
             print("  Summary of Failed Tasks:")
             print(tabulate(failed_tasks, headers=headers, tablefmt="grid"))
             print("--------------------------------------------------------------------")
