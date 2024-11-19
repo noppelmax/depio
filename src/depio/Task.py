@@ -6,7 +6,8 @@ import sys
 
 from .TaskStatus import TaskStatus, TERMINAL_STATES, SUCCESSFUL_TERMINAL_STATES, FAILED_TERMINAL_STATES
 from .stdio_helpers import redirect, stop_redirect
-from .exceptions import ProductNotProducedException, TaskRaisedException, UnknownStatusException, ProductNotUpdatedException
+from .exceptions import ProductNotProducedException, TaskRaisedException, UnknownStatusException, ProductNotUpdatedException, \
+    DependencyNotMetException
 
 
 class Product():
@@ -74,6 +75,8 @@ class Task:
 
         self.products = [args_dict[argname] for argname in self.products_args]
         self.dependencies = [args_dict[argname] for argname in self.dependencies_args]
+        self.task_dependencies = None
+        self.path_dependencies = None
 
         self._stdout = None
         self._stderr = None
@@ -82,12 +85,12 @@ class Task:
 
     def __str__(self):
         return f"Task:{self.name}"
-    
+
     def run(self):
-        d = [str(dependency) for dependency in self.dependencies if dependency.exists()]
-        if any(not b for b in d):
+        not_existing_path_dependencies = [str(dependency) for dependency in self.path_dependencies if not dependency.exists()]
+        if len(not_existing_path_dependencies) > 0:
             self._status = TaskStatus.FAILED
-            raise ProductNotProducedException(f"Task {self.name}: Dependency/ies {d} not met.")
+            raise DependencyNotMetException(f"Task {self.name}: Dependency/ies {not_existing_path_dependencies} not met.")
 
         # Store the last-modification timestamp of the already existing products.
         pt_before = [(str(product), getmtime(product)) for product in self.products if product.exists()]
