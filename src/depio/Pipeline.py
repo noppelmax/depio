@@ -77,6 +77,7 @@ class Pipeline:
         all_dependencies_are_available = True
         is_new_depfail_found = False
 
+
         # Execute and check all dependencies first
         for t_dep in task.task_dependencies:
             assert isinstance(t_dep, Task)
@@ -100,8 +101,8 @@ class Pipeline:
                     is_new_depfail_found = True  # Remember that we propagated dependency failures
 
         # Execute the task if all dependencies are given
-        if all_dependencies_are_available:
-            self.depioExecutor.submit(task)
+        if all_dependencies_are_available or self.depioExecutor.handles_dependencies:
+            self.depioExecutor.submit(task, task.task_dependencies)
             self.submitted_tasks.add(task)
 
         return is_new_depfail_found
