@@ -216,7 +216,7 @@ class Task:
 
     @property
     def status(self):
-        s = self._status
+        s = self._status # Fix status as temporary to return a consistent tuple
         return s, self.statustext(s), self.statuscolor(s)
 
     @property
