@@ -80,6 +80,9 @@ class Task:
         self.slurmjob = None
         self._slurmid = None
 
+    def __str__(self):
+        return f"Task:{self.name}"
+    
     def run(self):
         d = [str(dependency) for dependency in self.dependencies if dependency.exists()]
         if any(not b for b in d):
@@ -119,8 +122,6 @@ class Task:
 
         self._status = TaskStatus.FINISHED
 
-    def __str__(self):
-        return f"Task:{self.name}"
 
     def _update_by_slurmjob(self):
         assert self.slurmjob is not None
