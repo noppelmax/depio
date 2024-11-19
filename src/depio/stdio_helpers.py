@@ -170,7 +170,7 @@ class LocalProxy:
     __deepcopy__ = lambda x, memo: copy.deepcopy(x._get_current_object(), memo)
 
 
-def redirect():
+def redirect(stringio : StringIO):
     """
     Enables the redirect for the current thread's output to a single cStringIO
     object and returns the object.
@@ -182,8 +182,7 @@ def redirect():
     ident = threading.current_thread().ident
 
     # Enable the redirect and return the cStringIO object.
-    thread_proxies[ident] = StringIO()
-    return thread_proxies[ident]
+    thread_proxies[ident] = stringio
 
 
 def stop_redirect():
@@ -202,10 +201,8 @@ def stop_redirect():
         return
 
     # Read the value, close/remove the buffer, and return the value.
-    retval = thread_proxies[ident].getvalue()
-    thread_proxies[ident].close()
+    thread_proxies[ident] = None
     del thread_proxies[ident]
-    return retval
 
 
 def _get_stream(original):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pathlib
 import typing
+from io import StringIO
 from os.path import getmtime
 from typing import List, Dict, Callable, get_origin, Annotated, get_args, Union
 import sys
@@ -107,9 +108,7 @@ class Task:
         self.products : List[pathlib.Path] = [args_dict[argname] for argname in self.products_args] + produces
         self.dependencies: List[Union[Task,pathlib.Path]] = [args_dict[argname] for argname in self.dependencies_args] + depends_on
 
-        self._stdout = None
-        self._stderr = None
-
+        self.stdout = StringIO()
         self.slurmjob = None
         self._slurmid = None
 
@@ -117,6 +116,8 @@ class Task:
         return f"Task:{self.name}"
 
     def run(self):
+
+        redirect(self.stdout)
 
         # Check if all path dependencies are met
         not_existing_path_dependencies = [str(dependency) for dependency in self.path_dependencies if not dependency.exists()]
@@ -131,7 +132,6 @@ class Task:
         self._status = TaskStatus.RUNNING
 
         try:
-            self._stdout = redirect()
             self.func(*self.func_args, **self.func_kwargs)
         except Exception as e:
             self._status = TaskStatus.FAILED
@@ -247,24 +247,6 @@ class Task:
         if not self.slurmjob is None:
             self._update_by_slurmjob()
             return f"{self._slurmid}"
-        else:
-            return ""
-
-    @property
-    def stdout(self) -> str:
-        if self.slurmjob:
-            return self.slurmjob.stdout()
-        elif not self._stdout is None:
-            return self._stdout.getvalue()
-        else:
-            return ""
-
-    @property
-    def stderr(self) -> str:
-        if self.slurmjob:
-            return self.slurmjob.stderr()
-        elif not self._stderr is None:
-            return self._stderr.getvalue()
         else:
             return ""
 

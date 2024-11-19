@@ -6,6 +6,7 @@ import sys
 from termcolor import colored
 from tabulate import tabulate
 
+from .stdio_helpers import enable_proxy
 from .Task import Task
 from .TaskStatus import TaskStatus
 from .Executors import AbstractTaskExecutor
@@ -100,6 +101,8 @@ class Pipeline:
         return is_new_depfail_found
 
     def run(self) -> None:
+        enable_proxy()
+
         self._solve_order()
         self.submitted_tasks: Set[Task] = set()
 
@@ -127,7 +130,7 @@ class Pipeline:
     def _get_text_for_task(self, task):
         status = task.status
 
-        formatted_status = colored(f"{task.statustext(status[0]).upper()}", task.statuscolor(status[0]))
+        formatted_status = colored(f"{task.statustext(status[0]).upper():<{len('DEP. FAILED')}s}", task.statuscolor(status[0]))
         formatted_slurmstatus = colored(f"{task.slurmjob_status:<{len('OUT_OF_MEMORY')}s}", task.statuscolor(status[0]))
         return [
             task.id,
@@ -168,16 +171,13 @@ class Pipeline:
 
         if failed_tasks:
             headers = ["Task ID", "Name", "Slurm ID", "Status"]
-            print("  Summary of Failed Tasks:")
-            print(tabulate(failed_tasks, headers=headers, tablefmt="grid"))
-            print("--------------------------------------------------------------------")
+            print("---> Summary of Failed Tasks:")
+            print()
 
             for task in self.tasks:
                 if task.status[0] == TaskStatus.FAILED:
                     print(f"Details for Task ID: {task.id} - Name: {task.name}")
-                    print(tabulate([[task.stdout]], headers=["STDOUT"], tablefmt="grid"))
-                    if task.stderr:
-                        print(tabulate([[task.stderr]], headers=["STDERR"], tablefmt="grid"))
+                    print(tabulate([[task.stdout.getvalue()]], headers=["STDOUT"], tablefmt="grid"))
 
         print("Exit.")
         exit(1)
