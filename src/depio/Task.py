@@ -126,7 +126,7 @@ class Task:
             raise DependencyNotMetException(f"Task {self.name}: Dependency/ies {not_existing_path_dependencies} not met.")
 
         # Store the last-modification timestamp of the already existing products.
-        product_timestamps_before_running: Dict = {str(product): getmtime(product) for product in self.products if product.exists()}
+        product_timestamps_before_running: Dict[str, float] = {str(product): getmtime(product) for product in self.products if product.exists()}
 
         # Call the actual function
         self._status = TaskStatus.RUNNING
@@ -249,6 +249,16 @@ class Task:
             return f"{self._slurmid}"
         else:
             return ""
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            b = (self.func == other.func
+                 and self.func_args == other.func_args
+                 and self.func_kwargs == other.func_kwargs
+                 and self.name == other.name)
+            return b
+        else:
+            return False
 
 
 __all__ = [Task, Product, Dependency, _get_not_updated_products]

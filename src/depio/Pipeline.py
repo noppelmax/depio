@@ -1,5 +1,4 @@
 from typing import Set, Dict, List
-import pathlib
 from pathlib import Path
 import time
 import sys
@@ -23,13 +22,19 @@ class Pipeline:
         self.REFRESHRATE: float = refreshrate
 
         self.name: str = name
-        self.submitted_tasks: Set[Task] = None
-        self.tasks: List[Task] = []  # A list because we want to keep the order
+        self.submitted_tasks: List[Task] = None
+        self.tasks: List[Task] = []
         self.depioExecutor: AbstractTaskExecutor = depioExecutor
         self.registered_products: Set[Path] = set()
         if not self.QUIET: print("Pipeline initialized")
 
     def add_task(self, task: Task) -> None:
+        # Check if the exact task is already registered
+        for registered_task in self.tasks:
+            if task == registered_task:
+                return registered_task
+
+
         # Check is a product is already registered
         products_already_registered: List[str] = [str(p) for p in task.products if str(p) in set(map(str, self.registered_products))]
         if len(products_already_registered) > 0:
@@ -47,10 +52,11 @@ class Pipeline:
         # Register task
         self.tasks.append(task)
         task.queue_id = len(self.tasks)
+        return task
 
     def _solve_order(self) -> None:
         # Generate a task to product mapping.
-        product_to_task: Dict = {product: task for task in self.tasks for product in task.products}
+        product_to_task: Dict[Path, Task] = {product: task for task in self.tasks for product in task.products}
 
         # Add the dependencies to the tasks
         for task in self.tasks:
@@ -61,8 +67,9 @@ class Pipeline:
                 raise DependencyNotAvailableException(f"Dependency/ies '{unavailable_dependencies}' do/es not exist and can not be produced.")
 
             # Add the tasks that produce path_deps and remove such deps from the path_deps
-            task.task_dependencies = set([product_to_task[d] for d in task.dependencies if d in product_to_task])
-            task.path_dependencies = set([d for d in task.dependencies if d not in product_to_task])
+            task.task_dependencies = ([product_to_task[d] for d in task.dependencies if isinstance(d, Path) and d in product_to_task]
+                                      + [d for d in task.dependencies if isinstance(d,Task)])
+            task.path_dependencies = [d for d in task.dependencies if isinstance(d, Path) and d not in product_to_task]
 
     def _submit_task(self, task: Task) -> bool:
         """
@@ -103,7 +110,7 @@ class Pipeline:
         # Execute the task if all dependencies are given
         if all_dependencies_are_available or self.depioExecutor.handles_dependencies():
             self.depioExecutor.submit(task, task.task_dependencies)
-            self.submitted_tasks.add(task)
+            self.submitted_tasks.append(task)
 
         return is_new_depfail_found
 
@@ -111,7 +118,7 @@ class Pipeline:
         enable_proxy()
 
         self._solve_order()
-        self.submitted_tasks: Set[Task] = set()
+        self.submitted_tasks: List[Task] = []
 
         while True:
             try:
