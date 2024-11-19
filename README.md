@@ -1,5 +1,5 @@
 # depio
-![python-package.yml](https://github.com/OWNER/REPOSITORY/actions/workflows/python-package.yml/badge.svg)
+![python-package.yml](https://github.com/noppelmax/depio/actions/workflows/python-package.yml/badge.svg)
 
 A simple task manager.
 
