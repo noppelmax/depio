@@ -221,15 +221,15 @@ class Task:
 
     @property
     def is_in_terminal_state(self) -> bool:
-        return self.status[0] in TERMINAL_STATES
+        return self._status in TERMINAL_STATES
 
     @property
     def is_in_successful_terminal_state(self) -> bool:
-        return self.status[0] in SUCCESSFUL_TERMINAL_STATES
+        return self._status in SUCCESSFUL_TERMINAL_STATES
 
     @property
     def is_in_failed_terminal_state(self) -> bool:
-        return self.status[0] in FAILED_TERMINAL_STATES
+        return self._status in FAILED_TERMINAL_STATES
 
     def set_to_depfailed(self) -> None:
         self._status = TaskStatus.DEPFAILED
