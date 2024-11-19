@@ -6,7 +6,7 @@ import sys
 
 from .TaskStatus import TaskStatus, TERMINAL_STATES, SUCCESSFUL_TERMINAL_STATES, FAILED_TERMINAL_STATES
 from .stdio_helpers import redirect, stop_redirect
-from .exceptions import ProductNotProducedException, TaskRaisedException, UnknownStatusException, ProductNotUpdatedException, \
+from .exceptions import ProductNotProducedException, TaskRaisedExceptionException, UnknownStatusException, ProductNotUpdatedException, \
     DependencyNotMetException
 
 
@@ -87,6 +87,8 @@ class Task:
         return f"Task:{self.name}"
 
     def run(self):
+
+        # Check if all path dependencies are met
         not_existing_path_dependencies = [str(dependency) for dependency in self.path_dependencies if not dependency.exists()]
         if len(not_existing_path_dependencies) > 0:
             self._status = TaskStatus.FAILED
@@ -101,10 +103,11 @@ class Task:
         try:
             self._stdout = redirect()
             self.func(*self.func_args, **self.func_kwargs)
-            stop_redirect()
         except Exception as e:
             self._status = TaskStatus.FAILED
-            raise TaskRaisedException(e)
+            raise TaskRaisedExceptionException(e)
+        finally:
+            stop_redirect()
 
         # Check if any product does not exist.
         p = [str(product) for product in self.products if not product.exists()]

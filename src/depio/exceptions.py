@@ -13,7 +13,7 @@ class DependencyNotMetException(Exception):
     pass
 
 
-class TaskRaisedException(Exception):
+class TaskRaisedExceptionException(Exception):
     pass
 
 class UnknownStatusException(Exception):
