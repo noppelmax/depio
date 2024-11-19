@@ -15,7 +15,7 @@ stdio_helpers.enable_proxy()
 depioExecutor = DemoTaskExecutor()
 depioExecutor = ParallelExecutor()
 
-defaultpipeline = Pipeline(depioExecutor=depioExecutor)
+defaultpipeline = Pipeline(depioExecutor=depioExecutor, clear_screen=False)
 
 # Use the decorator with args and kwargs
 @task("datapipeline")
