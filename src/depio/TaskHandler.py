@@ -151,19 +151,27 @@ class TaskHandler:
 
     def exit_with_failed_tasks(self) -> None:
         print()
-        print("--------------------------------------------------------------------")
-        print("  STDOUT/STDERR of failed tasks:")
-        for task in self.tasks:
-            if task.status[0] == TaskStatus.FAILED: # Only for task that failed on their own
-                print("--------------------------------------------------------------------")
-                print(f"  {task.id}: {task.name:20s} | {task.slurmid:10s} | {task.status[1]:15s}")
-                print("------ STDOUT ------------------------------------------------------")
-                print(task.stdout)
-                if task.stderr != "":
-                    print("------ STDERR ------------------------------------------------------")
-                    print(task.stderr)
+        failed_tasks = [
+            [task.id, task.name, task.slurmid, task.status[1]]
+            for task in self.tasks if task.status[0] == TaskStatus.FAILED
+        ]
 
-        print("--------------------------------------------------------------------")
+        if failed_tasks:
+            headers = ["Task ID", "Name", "Slurm ID", "Status"]
+            print("--------------------------------------------------------------------")
+            print("  Summary of Failed Tasks:")
+            print(tabulate(failed_tasks, headers=headers, tablefmt="grid"))
+            print("--------------------------------------------------------------------")
+
+            for task in self.tasks:
+                if task.status[0] == TaskStatus.FAILED:
+                    print(f"Details for Task ID: {task.id} - Name: {task.name}")
+                    print("------ STDOUT ------------------------------------------------------")
+                    print(tabulate([[task.stdout]], headers=["STDOUT"], tablefmt="grid"))
+                    if task.stderr:
+                        print("------ STDERR ------------------------------------------------------")
+                        print(tabulate([[task.stderr]], headers=["STDERR"], tablefmt="grid"))
+                    print("--------------------------------------------------------------------")
 
         print("Exit.")
         exit(1)
