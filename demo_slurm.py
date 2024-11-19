@@ -24,7 +24,8 @@ internal_executor = submitit.AutoExecutor(folder=SLURM)
 internal_executor.update_parameters(
             time=60*48, # in mins
             partition="gpu",
-            mem=32
+            mem=32,
+            gpus_per_node=0,
 )
 
 depioExecutor = SubmitItExecutor(internal_executor=internal_executor)

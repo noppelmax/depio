@@ -162,7 +162,7 @@ class Task:
         self.slurmjob.watcher.update()
         info = self.slurmjob.get_info()
 
-        self._slurmid = f"{int(self.slurmjob.job_id):6d}-{int(self.slurmjob.task_id):3d}"
+        self._slurmid = f"{int(self.slurmjob.job_id):d}-{int(self.slurmjob.task_id):d}"
 
         if self.slurmjob.state in ['RUNNING', 'CONFIGURING', 'COMPLETING', 'STAGE_OUT']:
             self._status = TaskStatus.RUNNING
