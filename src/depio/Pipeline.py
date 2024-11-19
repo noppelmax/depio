@@ -101,7 +101,7 @@ class Pipeline:
                     is_new_depfail_found = True  # Remember that we propagated dependency failures
 
         # Execute the task if all dependencies are given
-        if all_dependencies_are_available or self.depioExecutor.handles_dependencies:
+        if all_dependencies_are_available or self.depioExecutor.handles_dependencies():
             self.depioExecutor.submit(task, task.task_dependencies)
             self.submitted_tasks.add(task)
 
