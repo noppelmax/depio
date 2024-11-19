@@ -1,4 +1,4 @@
-from typing import Set
+from typing import Set, Dict
 import pathlib
 import time
 import sys
@@ -24,12 +24,12 @@ class Pipeline:
         # Check is a output is already registered
         products_already_registered = [str(p) for p in task.products if str(p) in set(map(str, self.registered_products))]
         if len(products_already_registered) > 0:
-                raise ProductAlreadyRegisteredException(
-                    f"The product\s {products_already_registered} is/are already registered. Each output can only be registered from one task.")
+            raise ProductAlreadyRegisteredException(
+                f"The product\s {products_already_registered} is/are already registered. Each output can only be registered from one task.")
 
-        # Check if the hard dependencies are registered already
-        if any(True for t in task.dependencies_hard if t not in self.tasks):
-            raise TaskNotInQueueException("Add the task into the queue in the correct order.")
+        # Check if the task dependencies are registered already
+        if any(True for t in task.task_dependencies if t not in self.tasks):
+            raise TaskNotInQueueException("Add the tasks into the queue in the correct order.")
 
         # Register products
         self.registered_products.extend(task.products)
@@ -39,22 +39,19 @@ class Pipeline:
         task.queue_id = len(self.tasks)
 
     def _solve_order(self) -> None:
-        # Obtain a output so task mapping.
-        product_to_task = {product: task for task in self.tasks for product in task.products}
+        # Generate a task to product mapping.
+        product_to_task: Dict = {product: task for task in self.tasks for product in task.products}
 
-        # Assign the soft dependencies to the tasks
+        # Add the dependencies to the tasks
         for task in self.tasks:
-            task.dependencies_soft = []
             # Verify that each dependency is available and add if yes.
-            for dependency in task.dependencies:
-                if dependency not in product_to_task and not (isinstance(dependency, pathlib.Path) and dependency.exists()):
-                    raise DependencyNotAvailableException(f"No task produces '{dependency}' nor does it exist.")
-                # Generate the tasks which generate dependencies
-                task.dependencies_soft.append(product_to_task[dependency] if dependency in product_to_task else dependency)
+            unavailable_dependencies = [d for d in task.path_dependencies
+                                        if d not in product_to_task and not d.exists()]
+            if len(unavailable_dependencies) > 0:
+                raise DependencyNotAvailableException(f"Dependency/ies '{unavailable_dependencies}' do/es not exist and can not be produced.")
 
-        for task in self.tasks:
-            task.task_dependencies = list(filter(lambda x: isinstance(x, Task), task.dependencies_hard + task.dependencies_soft))
-            task.path_dependencies = list(filter(lambda x: isinstance(x, pathlib.Path), task.dependencies))
+            # Generate the tasks which generate dependencies
+            task.task_dependencies.extend([(product_to_task[d] if d in product_to_task else d) for d in task.path_dependencies])
 
     def _submit_task(self, task: Task) -> bool:
         """

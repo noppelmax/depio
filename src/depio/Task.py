@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import pathlib
 import typing
 from os.path import getmtime
-from typing import List, Callable, get_origin, Annotated, get_args
+from typing import List, Callable, get_origin, Annotated, get_args, Union
 import sys
 
 from .TaskStatus import TaskStatus, TERMINAL_STATES, SUCCESSFUL_TERMINAL_STATES, FAILED_TERMINAL_STATES
@@ -84,28 +85,28 @@ def _get_not_updated_products(product_timestamps_after_running: typing.Dict, pro
 
 
 class Task:
-    def __init__(self, name: str, func: Callable, dependencies_hard: List[Task] = None, func_args: List = None, func_kwargs: List = None, ):
+    def __init__(self, name: str, func: Callable, func_args: List = None, func_kwargs: List = None,
+                 produces: List[pathlib.Path] = None, depends_on: List[Union[pathlib.Path, Task]] = None):
         self._status: TaskStatus = TaskStatus.WAITING
         self.name = name
-        self.queue_id = None
+        self.queue_id: int = None
         self.slurmjob = None
         self.func = func
         self.func_args = func_args or []
         self.func_kwargs = func_kwargs or {}
-        self.dependencies_hard = dependencies_hard or []
+        self.task_dependencies = list(filter(lambda x: isinstance(x, Task), depends_on)) if depends_on else []
 
+        # Parse dependencies and products from the annotations and merge with args
         self.products_args = _parse_annotation_for_metaclass(func, Product)
         self.dependencies_args = _parse_annotation_for_metaclass(func, Dependency)
-
         args_dict = _get_args_dict(func, self.func_args, self.func_kwargs)
-
-        self.products = [args_dict[argname] for argname in self.products_args]
-        self.dependencies = [args_dict[argname] for argname in self.dependencies_args]
-        self.task_dependencies = None
-        self.path_dependencies = None
+        self.products = ([args_dict[argname] for argname in self.products_args] + produces if produces else [])
+        self.path_dependencies = ([args_dict[argname] for argname in self.dependencies_args]
+                                  + list(filter(lambda x: isinstance(x, pathlib.Path), depends_on)) if depends_on else [])
 
         self._stdout = None
         self._stderr = None
+
         self.slurmjob = None
         self._slurmid = None
 
@@ -216,7 +217,7 @@ class Task:
 
     @property
     def status(self):
-        s = self._status # Fix status as temporary to return a consistent tuple
+        s = self._status  # Fix status as temporary to return a consistent tuple
         return s, self.statustext(s), self.statuscolor(s)
 
     @property
