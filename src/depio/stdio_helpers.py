@@ -14,6 +14,7 @@
 import threading
 import sys
 from io import StringIO
+import copy
 
 from typing import Any
 from typing import Optional
