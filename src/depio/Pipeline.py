@@ -22,10 +22,10 @@ class Pipeline:
 
     def add_task(self, task) -> None:
         # Check is a output is already registered
-        for product in task.products:
-            if product in self.registered_products:
+        products_of_the_task_that_are_already_registered = [product for product in task.products if product in self.registered_products]
+        if len(products_of_the_task_that_are_already_registered) > 0:
                 raise ProductAlreadyRegisteredException(
-                    f"The product {product} is already registered. Each output can only be registered from one task.")
+                    f"The product\s {products_of_the_task_that_are_already_registered} is/are already registered. Each output can only be registered from one task.")
 
         # Check if the hard dependencies are registered already
         for t in task.dependencies_hard:
