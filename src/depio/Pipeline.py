@@ -28,13 +28,11 @@ class Pipeline:
                     f"The product\s {products_already_registered} is/are already registered. Each output can only be registered from one task.")
 
         # Check if the hard dependencies are registered already
-        for t in task.dependencies_hard:
-            if t not in self.tasks:
-                raise TaskNotInQueueException("Add the task into the queue in the correct order.")
+        if any(True for t in task.dependencies_hard if t not in self.tasks):
+            raise TaskNotInQueueException("Add the task into the queue in the correct order.")
 
         # Register products
-        for product in task.products:
-            self.registered_products.append(product)
+        self.registered_products.extend(task.products)
 
         # Register task
         self.tasks.append(task)
