@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import typing
 from os.path import getmtime
 from typing import List, Callable, get_origin, Annotated, get_args
 import sys
@@ -57,6 +58,17 @@ def _parse_annotation_for_metaclass(func, metaclass):
     return results
 
 
+def _get_not_updated_products(product_timestamps_after_running: typing.Dict, product_timestamps_before_running: typing.Dict) -> typing.List[str]:
+    # Calculate the not updated products
+    not_updated_products = []
+    for product, before_timestamp in product_timestamps_before_running.items():
+        after_timestamp = product_timestamps_after_running.get(product)
+        if before_timestamp == after_timestamp:
+            not_updated_products.append(product)
+
+    return not_updated_products
+
+
 class Task:
     def __init__(self, name: str, func: Callable, dependencies_hard: List[Task] = None, func_args: List = None, func_kwargs: List = None, ):
         self.name = name
@@ -95,7 +107,7 @@ class Task:
             raise DependencyNotMetException(f"Task {self.name}: Dependency/ies {not_existing_path_dependencies} not met.")
 
         # Store the last-modification timestamp of the already existing products.
-        pt_before = [(str(product), getmtime(product)) for product in self.products if product.exists()]
+        product_timestamps_before_running = {str(product): getmtime(product) for product in self.products if product.exists()}
 
         # Call the actual function
         self._status = TaskStatus.RUNNING
@@ -110,24 +122,21 @@ class Task:
             stop_redirect()
 
         # Check if any product does not exist.
-        p = [str(product) for product in self.products if not product.exists()]
-        if len(p) > 0:
+        not_existing_products = [str(product) for product in self.products if not product.exists()]
+        if len(not_existing_products) > 0:
             self._status = TaskStatus.FAILED
-            raise ProductNotProducedException(f"Task {self.name}: Product/s {p} not produced.")
+            raise ProductNotProducedException(f"Task {self.name}: Product/s {not_existing_products} not produced.")
 
         # Check if any product has not been updated.
-        pt_after = [(str(product), getmtime(product)) for product in self.products]
-        not_updated_products = []
-        for before, after in zip(pt_before, pt_after):
-            if before[0] == after[0] and before[1] == after[1]:
-                not_updated_products.append(before[0])
+        product_timestamps_after_running = {str(product): getmtime(product) for product in self.products if product.exists()}
+
+        not_updated_products = _get_not_updated_products(product_timestamps_after_running, product_timestamps_before_running)
 
         if len(not_updated_products) > 0:
             self._status = TaskStatus.FAILED
             raise ProductNotUpdatedException(f"Task {self.name}: Product/s {not_updated_products} not updated.")
 
         self._status = TaskStatus.FINISHED
-
 
     def _update_by_slurmjob(self):
         assert self.slurmjob is not None
@@ -161,7 +170,8 @@ class Task:
             return self.slurmjob.state
         else:
             return ""
-    def statuscolor(self, s: TaskStatus =None) -> str:
+
+    def statuscolor(self, s: TaskStatus = None) -> str:
         if s is None: s = self._status
         status_colors = {
             TaskStatus.WAITING: 'blue',
@@ -180,7 +190,7 @@ class Task:
         else:
             raise UnknownStatusException("Status {} is unknown.".format(s))
 
-    def statustext(self, s: TaskStatus =None) -> str:
+    def statustext(self, s: TaskStatus = None) -> str:
         if s is None: s = self._status
         status_messages = {
             TaskStatus.WAITING: lambda: 'waiting' + (f" for {[d.queue_id for d in self.task_dependencies if not d.is_in_terminal_state]}" if len(
@@ -206,7 +216,6 @@ class Task:
     def status(self):
         s = self._status
         return s, self.statustext(s), self.statuscolor(s)
-
 
     @property
     def is_in_terminal_state(self) -> bool:
@@ -254,4 +263,4 @@ class Task:
             return ""
 
 
-__all__ = [Task, Product, Dependency]
+__all__ = [Task, Product, Dependency, _get_not_updated_products]
