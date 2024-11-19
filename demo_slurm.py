@@ -21,12 +21,14 @@ os.environ["SBATCH_RESERVATION"] = "isec-team"
 internal_executor = submitit.AutoExecutor(folder=SLURM)
 
 # TODO We might want to do this on a job level
-internal_executor.update_parameters(
-            time=60*48, # in mins
-            partition="gpu",
-            mem=32,
-            gpus_per_node=0,
-)
+TIME_IN_MINUTES = 60 * 48  # 48 hours in minutes
+default_params = {
+    "time": TIME_IN_MINUTES,
+    "partition": "gpu",
+    "mem": 32,
+    "gpus_per_node": 0
+}
+internal_executor.update_parameters(**default_params)
 
 depioExecutor = SubmitItExecutor(internal_executor=internal_executor)
 defaultpipeline = Pipeline(depioExecutor=depioExecutor)
