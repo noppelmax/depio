@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import enum
-import io
 from os.path import getmtime
 from typing import List, Callable, get_origin, Annotated, get_args
 import sys
-from termcolor import colored
 
+from .TaskStatus import TaskStatus, TERMINAL_STATES, SUCCESSFUL_TERMINAL_STATES, FAILED_TERMINAL_STATES
 from .stdio_helpers import redirect, stop_redirect
 from .exceptions import ProductNotProducedException, TaskRaisedException, UnknownStatusException, ProductNotUpdatedException
 
@@ -56,38 +54,6 @@ def _parse_annotation_for_metaclass(func, metaclass):
                 results.append(name)
 
     return results
-
-
-class TaskStatus(enum.Enum):
-    PENDING = enum.auto()
-    WAITING = enum.auto()
-    RUNNING = enum.auto()
-    FINISHED = enum.auto()
-    CANCELED = enum.auto()
-    FAILED = enum.auto()
-    SKIPPED = enum.auto()
-    DEPFAILED = enum.auto()
-    HOLD = enum.auto()
-    UNKNOWN = enum.auto()
-
-TERMINAL_STATES = [
-            TaskStatus.FINISHED,
-            TaskStatus.FAILED,
-            TaskStatus.SKIPPED,
-            TaskStatus.DEPFAILED,
-            TaskStatus.CANCELED]
-
-SUCCESSFUL_TERMINAL_STATES = [
-            TaskStatus.FINISHED,
-            TaskStatus.SKIPPED]
-
-FAILED_TERMINAL_STATES = [
-            TaskStatus.FAILED,
-            TaskStatus.DEPFAILED,
-            TaskStatus.CANCELED]
-
-
-
 
 
 class Task:
