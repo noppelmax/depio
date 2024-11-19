@@ -127,12 +127,14 @@ class TaskHandler:
     def _get_text_for_task(self, task, length, status=None):
         if status is None:
             status = task.status
-        formatted_status = colored(f"{task.statustext(status[0]):<{length}s}", task.statuscolor(status[0]))
+
+        formatted_status = colored(f"{task.statustext(status[0]).upper():<{length}s}", task.statuscolor(status[0]))
+        formatted_slurmstatus = colored(f"{task.slurmjob_status:<{len('OUT_OF_MEMORY')}s}", task.statuscolor(status[0]))
         return [
             task.id,
             task.name,
             task.slurmid,
-            task.slurmjob_status,
+            formatted_slurmstatus,
             formatted_status,
             [str(d) for d in task.path_dependencies],
             [str(p) for p in task.products]
