@@ -8,7 +8,7 @@ from tabulate import tabulate
 from .Task import Task
 from .TaskStatus import TaskStatus
 from .Executors import AbstractTaskExecutor
-from .exceptions import ProductAlreadyRegisteredException, TaskNotInQueueException
+from .exceptions import ProductAlreadyRegisteredException, TaskNotInQueueException, DependencyNotAvailableException
 
 
 class Pipeline:
