@@ -37,7 +37,7 @@ status_colors = {
 }
 
 
-def python_version_is_greater_equal_3_10():
+def python_version_is_greater_or_equal_to_3_10():
     return sys.version_info.major > 3 and sys.version_info.minor >= 10
 
 
@@ -48,7 +48,7 @@ def _get_args_dict(fn, args, kwargs):
 
 
 def _parse_annotation_for_metaclass(func, metaclass):
-    if python_version_is_greater_equal_3_10():
+    if python_version_is_greater_or_equal_to_3_10():
         # For python 3.10 and newer
         # annotations = inspect.get_annotations(func)
 
