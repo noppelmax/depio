@@ -145,7 +145,7 @@ class Pipeline:
         status = task.status
 
         formatted_status = colored(f"{status[1].upper():<{len('DEP. FAILED')}s}", status[2])
-        formatted_slurmstatus = colored(f"{task.slurmjob_status:<{len('OUT_OF_MEMORY')}s}", status[2])
+        formatted_slurmstatus = colored(f"{status[3]:<{len('OUT_OF_MEMORY')}s}", status[2])
         return [
             task.id,
             task.name,

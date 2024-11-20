@@ -111,6 +111,7 @@ class Task:
         self.stdout = StringIO()
         self.slurmjob = None
         self._slurmid = None
+        self._slurmstate = ""
 
     def __str__(self):
         return f"Task:{self.name}"
@@ -158,26 +159,24 @@ class Task:
 
     def _update_by_slurmjob(self):
         assert self.slurmjob is not None
-
         self.slurmjob.watcher.update()
-        info = self.slurmjob.get_info()
-
+        self._slurmstate = self.slurmjob.state
         self._slurmid = f"{int(self.slurmjob.job_id):d}-{int(self.slurmjob.task_id):d}"
 
-        if self.slurmjob.state in ['RUNNING', 'CONFIGURING', 'COMPLETING', 'STAGE_OUT']:
+        if self._slurmstate in ['RUNNING', 'CONFIGURING', 'COMPLETING', 'STAGE_OUT']:
             self._status = TaskStatus.RUNNING
-        elif self.slurmjob.state in ['FAILED', 'BOOT_FAIL', 'DEADLINE', 'NODE_FAIL', 'OUT_OF_MEMORY', 'PREEMPTED', 'SPECIAL_EXIT', 'STOPPED',
+        elif self._slurmstate in ['FAILED', 'BOOT_FAIL', 'DEADLINE', 'NODE_FAIL', 'OUT_OF_MEMORY', 'PREEMPTED', 'SPECIAL_EXIT', 'STOPPED',
                                      'SUSPENDED', 'TIMEOUT']:
             self._status = TaskStatus.FAILED
-        elif self.slurmjob.state in ['READY', 'PENDING', 'REQUEUE_FED', 'REQUEUED']:
+        elif self._slurmstate in ['READY', 'PENDING', 'REQUEUE_FED', 'REQUEUED']:
             self._status = TaskStatus.PENDING
-        elif self.slurmjob.state == 'CANCELED':
+        elif self._slurmstate == 'CANCELED':
             self._status = TaskStatus.CANCELED
-        elif self.slurmjob.state in ['COMPLETED']:
+        elif self._slurmstate in ['COMPLETED']:
             self._status = TaskStatus.FINISHED
-        elif self.slurmjob.state in ['RESV_DEL_HOLD', 'REQUEUE_HOLD', 'RESIZING', 'REVOKED', 'SIGNALING']:
+        elif self._slurmstate in ['RESV_DEL_HOLD', 'REQUEUE_HOLD', 'RESIZING', 'REVOKED', 'SIGNALING']:
             self._status = TaskStatus.HOLD
-        elif self.slurmjob.state == 'UNKNOWN':
+        elif self._slurmstate == 'UNKNOWN':
             self._status = TaskStatus.UNKNOWN
         else:
             raise Exception(f"Unknown slurmjob status! slurmjob.done {self.slurmjob.done}, slurmjob.state {self.slurmjob.state} ")
@@ -185,7 +184,8 @@ class Task:
     @property
     def slurmjob_status(self):
         if not self.slurmjob is None:
-            return self.slurmjob.state
+            if self._slurmstate is None: self._update_by_slurmjob()
+            return self._slurmstate
         else:
             return ""
 
@@ -221,7 +221,7 @@ class Task:
     @property
     def status(self):
         s = self._status  # Fix status as temporary to return a consistent tuple
-        return s, self.statustext(s), self.statuscolor(s)
+        return s, self.statustext(s), self.statuscolor(s), self._slurmstate
 
     @property
     def is_in_terminal_state(self) -> bool:
