@@ -58,18 +58,24 @@ class Pipeline:
         # Generate a task to product mapping.
         product_to_task: Dict[Path, Task] = {product: task for task in self.tasks for product in task.products}
 
+
+
+
+
         # Add the dependencies to the tasks
         for task in self.tasks:
+            # First spit of into tasks and paths
+            task_deps = [d for d in task.dependencies if isinstance(d, Task)]
+            path_deps = [d for d in task.dependencies if isinstance(d, Path)]
+
             # Verify that each dependency is available and add if yes.
-            unavailable_dependencies = [d for d in task.dependencies
-                                        if d not in self.tasks and d not in product_to_task and not d.exists()]
+            unavailable_dependencies = [d for d in path_deps if d not in product_to_task and not d.exists()]
             if len(unavailable_dependencies) > 0:
                 raise DependencyNotAvailableException(f"Dependency/ies '{unavailable_dependencies}' do/es not exist and can not be produced.")
 
             # Add the tasks that produce path_deps and remove such deps from the path_deps
-            task.task_dependencies = ([product_to_task[d] for d in task.dependencies if isinstance(d, Path) and d in product_to_task]
-                                      + [d for d in task.dependencies if isinstance(d,Task)])
-            task.path_dependencies = [d for d in task.dependencies if isinstance(d, Path) and d not in product_to_task]
+            task.task_dependencies = ([product_to_task[d] for d in path_deps if d in product_to_task] + task_deps)
+            task.path_dependencies = [d for d in path_deps if d not in product_to_task]
 
     def _submit_task(self, task: Task) -> bool:
         """
