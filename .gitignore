@@ -4,3 +4,6 @@ src/depio/__pycache__
 tests/__pycache__
 .run
 build
+multirun
+outputs
+slurm
