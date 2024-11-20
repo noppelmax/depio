@@ -10,7 +10,6 @@ from depio.Task import Product, Dependency
 from src.depio.Executors import ParallelExecutor
 from src.depio import stdio_helpers
 
-depioExecutor = DemoTaskExecutor()
 depioExecutor = ParallelExecutor()
 
 defaultpipeline = Pipeline(depioExecutor=depioExecutor, clear_screen=False)
