@@ -18,25 +18,21 @@ SLURM.mkdir(exist_ok=True)
 
 # Configure the slurm jobs
 os.environ["SBATCH_RESERVATION"] = "isec-team"
-internal_executor = submitit.AutoExecutor(folder=SLURM)
-depioExecutor = SubmitItExecutor(internal_executor=internal_executor)
-defaultpipeline = Pipeline(depioExecutor=depioExecutor)
+defaultpipeline = Pipeline(depioExecutor=SubmitItExecutor(folder=SLURM))
 
 # Use the decorator with args and kwargs
 @task("datapipeline")
-def funcdec(input: Annotated[pathlib.Path, Dependency],
-            output: Annotated[pathlib.Path, Product],
-            sec:int
+def slowfunction(output: Annotated[pathlib.Path, Product],
+            input: Annotated[pathlib.Path, Dependency] = None,
+            sec:int = 0
             ):
-    print(f"func dec reading from {input} and writing to {output}")
+    print(f"A function that is reading from {input} and writing to {output} in {sec} seconds.")
     time.sleep(sec)
     with open(output,'w') as f:
         f.write("Hallo from depio")
 
+defaultpipeline.add_task(slowfunction(BLD/"output1.txt",input=BLD/"input.txt", sec=2))
+defaultpipeline.add_task(slowfunction(BLD/"output2.txt",input=BLD/"input.txt", sec=3))
+defaultpipeline.add_task(slowfunction(BLD/"final1.txt",BLD/"output1.txt", sec=1))
 
-
-defaultpipeline.add_task(funcdec(BLD/"output.txt", BLD/"final.txt",sec=4))
-defaultpipeline.add_task(funcdec(BLD/"output.txt", BLD/"final.txt",sec=4))
-defaultpipeline.add_task(funcdec(BLD/"input.txt", BLD/"output.txt",sec=5))
-
-defaultpipeline.run()
+exit(defaultpipeline.run())
