@@ -7,8 +7,6 @@ from depio.Pipeline import Pipeline, Task, DependencyNotAvailableException
 
 # The following unit test mockup do not work on python >= 3.12
 if not (sys.version_info.major > 3 and sys.version_info.minor >= 12):
-
-
     class TaskMock(Task):
         def __init__(self, func, dependencies=[], products=[]):
             self.func = func
@@ -20,7 +18,8 @@ if not (sys.version_info.major > 3 and sys.version_info.minor >= 12):
             self.task_dependencies = []
 
     class PathMock(Path):
-        _flavour = type(Path())._flavour
+        if type(Path())._flavour:
+            _flavour = type(Path())._flavour
 
         def __init__(self, name: str, exists: bool = True):
             # Skip the `Path`'s __init__ method
