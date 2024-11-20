@@ -1,6 +1,6 @@
 [project]
 name = "depio"
-version = "0.0.2-rc2"
+version = "0.0.2-rc3"
 authors = [
   { name="Maximilian Noppel", email="noppel@kit.edu" },
 ]
