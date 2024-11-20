@@ -17,8 +17,9 @@ dependencies = [
     "pytest",
     "submitit",
     "coverage",
-    "hydra-core",
-    "termcolor"
+    "termcolor",
+    "attrs",
+    "nltk"
 ]
 
 [tool.pytest.ini_options]
