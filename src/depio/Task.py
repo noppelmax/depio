@@ -7,8 +7,6 @@ from os.path import getmtime
 from typing import List, Dict, Callable, get_origin, Annotated, get_args, Union
 import sys
 
-from nltk.corpus import dependency_treebank
-
 from .TaskStatus import TaskStatus, TERMINAL_STATES, SUCCESSFUL_TERMINAL_STATES, FAILED_TERMINAL_STATES
 from .stdio_helpers import redirect, stop_redirect
 from .exceptions import ProductNotProducedException, TaskRaisedExceptionException, UnknownStatusException, ProductNotUpdatedException, \
@@ -20,6 +18,10 @@ class Product():
 
 
 class Dependency():
+    pass
+
+
+class IgnoredForEq():
     pass
 
 
@@ -42,12 +44,12 @@ def python_version_is_greater_or_equal_to_3_10():
 
 
 # from https://stackoverflow.com/questions/218616/how-to-get-method-parameter-names
-def _get_args_dict(fn, args, kwargs):
+def _get_args_dict(fn, args, kwargs) -> Dict[str, typing.Any]:
     args_names = fn.__code__.co_varnames[:fn.__code__.co_argcount]
     return {**dict(zip(args_names, args)), **kwargs}
 
 
-def _parse_annotation_for_metaclass(func, metaclass):
+def _parse_annotation_for_metaclass(func, metaclass) -> List[str]:
     if python_version_is_greater_or_equal_to_3_10():
         # For python 3.10 and newer
         # annotations = inspect.get_annotations(func)
@@ -61,7 +63,7 @@ def _parse_annotation_for_metaclass(func, metaclass):
         else:
             annotations = getattr(func, '__annotations__', None)
 
-    results = []
+    results: List[str] = []
 
     for name, annotation in annotations.items():
         if get_origin(annotation) is Annotated:
@@ -102,12 +104,14 @@ class Task:
         self.func_kwargs: Dict = func_kwargs or {}
 
         # Parse dependencies and products from the annotations and merge with args
-        self.products_args = _parse_annotation_for_metaclass(func, Product)
-        self.dependencies_args = _parse_annotation_for_metaclass(func, Dependency)
-        args_dict = _get_args_dict(func, self.func_args, self.func_kwargs)
+        self.products_args: List[str] = _parse_annotation_for_metaclass(func, Product)
+        self.dependencies_args: List[str] = _parse_annotation_for_metaclass(func, Dependency)
+        self.ignored_for_eq_args: List[str] = _parse_annotation_for_metaclass(func, IgnoredForEq)
+        args_dict: Dict[str,typing.Any] = _get_args_dict(func, self.func_args, self.func_kwargs)
         self.products: List[pathlib.Path] = [args_dict[argname] for argname in self.products_args if argname in args_dict] + produces
-        self.dependencies: List[Union[Task, pathlib.Path]] = [args_dict[argname] for argname in self.dependencies_args if argname in args_dict] + depends_on
-
+        self.dependencies: List[Union[Task, pathlib.Path]] = [args_dict[argname] for argname in self.dependencies_args if
+                                                              argname in args_dict] + depends_on
+        self.cleaned_args: Dict[str,typing.Any] = { k:v for k,v in args_dict.items() if k not in self.ignored_for_eq_args }
         self.stdout = StringIO()
         self.slurmjob = None
         self._slurmid = None
@@ -166,7 +170,7 @@ class Task:
         if self._slurmstate in ['RUNNING', 'CONFIGURING', 'COMPLETING', 'STAGE_OUT']:
             self._status = TaskStatus.RUNNING
         elif self._slurmstate in ['FAILED', 'BOOT_FAIL', 'DEADLINE', 'NODE_FAIL', 'OUT_OF_MEMORY', 'PREEMPTED', 'SPECIAL_EXIT', 'STOPPED',
-                                     'SUSPENDED', 'TIMEOUT']:
+                                  'SUSPENDED', 'TIMEOUT']:
             self._status = TaskStatus.FAILED
         elif self._slurmstate in ['READY', 'PENDING', 'REQUEUE_FED', 'REQUEUED']:
             self._status = TaskStatus.PENDING
@@ -253,8 +257,7 @@ class Task:
     def __eq__(self, other):
         if isinstance(other, self.__class__):
             b = (self.func == other.func
-                 and self.func_args == other.func_args
-                 and self.func_kwargs == other.func_kwargs
+                 and self.cleaned_args == other.cleaned_args
                  and self.name == other.name)
             return b
         else:
