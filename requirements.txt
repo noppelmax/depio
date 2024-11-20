@@ -4,5 +4,4 @@ submitit
 coverage
 hydra-core
 termcolor
-nltk
 attrs
