@@ -92,19 +92,25 @@ def slowfunction(output: Annotated[pathlib.Path, Product],
         f.write("Hallo from depio")
 
 
-t1 = defaultpipeline.add_task(Task("functionaldemo1", slowfunction, [1]))
-t1 = defaultpipeline.add_task(Task("functionaldemo1", slowfunction, [1]))
-t1 = defaultpipeline.add_task(Task("functionaldemo1", slowfunction, [1]))
-t2 = defaultpipeline.add_task(Task("functionaldemo2", slowfunction, [2], depends_on=[t1]))
-t3 = defaultpipeline.add_task(Task("functionaldemo3", slowfunction, [3], depends_on=[t2]))
+defaultpipeline.add_task(Task("functionaldemo1", slowfunction, [BLD/"output1.txt"], {"input": BLD/"input.txt", "sec": 2}))
+defaultpipeline.add_task(Task("functionaldemo2", slowfunction, [BLD/"final1.txt"], {"input": BLD/"output1.txt", "sec": 1}))
 
 exit(defaultpipeline.run())
 ```
 
+This will produce the following output:
+```
+Tasks:
+  ID  Name             Slurm ID    Slurm Status    Status       Task Deps.    Path Deps.             Products
+   1  functionaldemo1                              FINISHED     []            ['build/input.txt']    ['build/output1.txt']
+   2  functionaldemo2                              FINISHED     [1]           ['build/output1.txt']  ['build/final1.txt']
+All jobs done! Exit.
+```
+
+The main difference is that you have to pass the args and kwargs manually, but therefore can also overwrite the task name.
 However you can also define the DAG by yourself:
 ```python
 import time
-import pathlib
 
 from depio.Pipeline import Pipeline
 from depio.Executors import ParallelExecutor
@@ -116,16 +122,53 @@ def slowfunction(sec:int = 0):
     print(f"A function that is doing something for {sec} seconds.")
     time.sleep(sec)
 
-
 t1 = defaultpipeline.add_task(Task("functionaldemo1", slowfunction, [1]))
-t1 = defaultpipeline.add_task(Task("functionaldemo1", slowfunction, [1]))
-t1 = defaultpipeline.add_task(Task("functionaldemo1", slowfunction, [1]))
-t2 = defaultpipeline.add_task(Task("functionaldemo2", slowfunction, [2], depends_on=[t1]))
-t3 = defaultpipeline.add_task(Task("functionaldemo3", slowfunction, [3], depends_on=[t2]))
+t2 = defaultpipeline.add_task(Task("functionaldemo1", slowfunction, [1]))
+t3 = defaultpipeline.add_task(Task("functionaldemo1", slowfunction, [1]))
+t4 = defaultpipeline.add_task(Task("functionaldemo2", slowfunction, [2], depends_on=[t3]))
+t5 = defaultpipeline.add_task(Task("functionaldemo3", slowfunction, [3], depends_on=[t4]))
 
 exit(defaultpipeline.run())
 ```
 
+This should produce the following output:
+```
+Tasks:
+  ID  Name             Slurm ID    Slurm Status    Status       Task Deps.    Path Deps.    Products
+   1  functionaldemo1                              FINISHED     []            []            []
+   2  functionaldemo2                              FINISHED     [1]           []            []
+   3  functionaldemo3                              FINISHED     [2]           []            []
+All jobs done! Exit.
+```
+
+Notice how it produced only three tasks instead of five.
+The reason is that the first three task are the same function with the same arguments.
+depio is merging these together.
+When using the functional interface as above with hard coded dependencies between the task (`depends_on`), the `add_task` function will return the earliest registered task with the given function and arguments.
+You hence have to save the return value as the task object and relate to this object.
+
+## How to use with Slurm
+You just have to replace the pipeline with a slurm pipeline like so:
+```python
+import os
+import pathlib
+import submitit
+
+from depio.Executors import SubmitItExecutor
+from depio.Pipeline import Pipeline
+
+BLD = pathlib.Path("build")
+BLD.mkdir(exist_ok=True)
+
+SLURM = pathlib.Path("slurm")
+SLURM.mkdir(exist_ok=True)
+
+# Configure the slurm pipeline
+os.environ["SBATCH_RESERVATION"] = "<your reservation>"
+defaultpipeline = Pipeline(depioExecutor=SubmitItExecutor())
+
+...
+```
 
 ## How to develop
 Create an editable egg and install it.
@@ -139,4 +182,11 @@ Run
 ```bash
 pytest
 ```
+
+## Licence
+See [LICENCE](LICENSE).
+
+## Security
+See [SECURITY](SECURITY.md).
+
 
