@@ -1,0 +1,10 @@
+name: zhang
+start_with_trigger_images: false
+ignore_triggerarea: false
+use_softlabels: false
+ignore_prediction: false
+eval_targetlabel: ${targetlabel}
+optimize_targetlabel: ${targetlabel}
+y_groundtruth: false
+y_trigger: false
+y_original: false

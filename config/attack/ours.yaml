@@ -1,0 +1,10 @@
+name: ours
+start_with_trigger_images: true
+ignore_triggerarea: true
+use_softlabels: false
+ignore_prediction: false
+eval_targetlabel: ${targetlabel}
+optimize_targetlabel: ${targetlabel}
+y_groundtruth: null
+y_trigger: null
+y_original: null

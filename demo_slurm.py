@@ -21,7 +21,7 @@ os.environ["SBATCH_RESERVATION"] = "isec-team"
 defaultpipeline = Pipeline(depioExecutor=SubmitItExecutor(folder=SLURM))
 
 # Use the decorator with args and kwargs
-@task("datapipeline")
+@task("datapipeline", slurm_gpus_per_task=1)
 def slowfunction(output: Annotated[pathlib.Path, Product],
             input: Annotated[pathlib.Path, Dependency] = None,
             sec:int = 0
