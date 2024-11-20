@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = [
   { name="Maximilian Noppel", email="noppel@kit.edu" },
 ]
-description = "A simple task manager."
+description = "A simple task manager with slurm integration"
 readme = "README.md"
 requires-python = ">=3.9"
 classifiers = [
@@ -25,3 +25,7 @@ dependencies = [
 pythonpath = [
   "src"
 ]
+
+[project.urls]
+Homepage = "https://github.com/noppelmax/depio"
+Issues = "https://github.com/noppelmax/depio/issues"
