@@ -105,8 +105,8 @@ class Task:
         self.products_args = _parse_annotation_for_metaclass(func, Product)
         self.dependencies_args = _parse_annotation_for_metaclass(func, Dependency)
         args_dict = _get_args_dict(func, self.func_args, self.func_kwargs)
-        self.products: List[pathlib.Path] = [args_dict[argname] for argname in self.products_args] + produces
-        self.dependencies: List[Union[Task, pathlib.Path]] = [args_dict[argname] for argname in self.dependencies_args] + depends_on
+        self.products: List[pathlib.Path] = [args_dict[argname] for argname in self.products_args if argname in args_dict] + produces
+        self.dependencies: List[Union[Task, pathlib.Path]] = [args_dict[argname] for argname in self.dependencies_args if argname in args_dict] + depends_on
 
         self.stdout = StringIO()
         self.slurmjob = None
