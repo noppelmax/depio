@@ -4,6 +4,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from typing import List
 import submitit
 from attrs import frozen
+from pathlib import Path
 
 from .Task import Task
 
@@ -65,9 +66,9 @@ DEFAULT_PARAMS = {
 
 class SubmitItExecutor(AbstractTaskExecutor):
 
-    def __init__(self, internal_executor=None, **kwargs):
+    def __init__(self, folder:Path, internal_executor=None, **kwargs):
 
-        self.internal_executor = internal_executor if internal_executor is not None else submitit.AutoExecutor()
+        self.internal_executor = internal_executor if internal_executor is not None else submitit.AutoExecutor(folder=folder)
         self.internal_executor.update_parameters(**DEFAULT_PARAMS)
         self.running_jobs = []
         self.running_tasks = []
