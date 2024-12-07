@@ -58,10 +58,6 @@ class Pipeline:
         # Generate a task to product mapping.
         product_to_task: Dict[Path, Task] = {product: task for task in self.tasks for product in task.products}
 
-
-
-
-
         # Add the dependencies to the tasks
         for task in self.tasks:
             # First spit of into tasks and paths
@@ -89,7 +85,6 @@ class Pipeline:
 
         all_dependencies_are_available = True
         is_new_depfail_found = False
-
 
         # Execute and check all dependencies first
         for t_dep in task.task_dependencies:
