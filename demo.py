@@ -11,7 +11,6 @@ from src.depio.Executors import ParallelExecutor
 from src.depio import stdio_helpers
 
 depioExecutor = ParallelExecutor()
-
 defaultpipeline = Pipeline(depioExecutor=depioExecutor, clear_screen=False)
 
 # Use the decorator with args and kwargs
