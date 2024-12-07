@@ -1,3 +1,12 @@
+<h4 align="center">
+  <a href="https://#">Install</a>
+  ·
+  <a href="https://#">Configure</a>
+  ·
+  <a href="https://#">Docs</a>
+</h4>
+
+
 # depio
 ![python-package.yml](https://github.com/noppelmax/depio/actions/workflows/python-package.yml/badge.svg)
 
