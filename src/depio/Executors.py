@@ -75,7 +75,7 @@ class SubmitItExecutor(AbstractTaskExecutor):
         self.internal_executor = internal_executor if internal_executor is not None else submitit.AutoExecutor(
             folder=folder)
         self.internal_executor.update_parameters(**DEFAULT_PARAMS)
-        self.running_jobs = []
+        self.running_slurmjobs = []
         self.running_tasks = []
         print("depio-SubmitItExecutor initialized")
 
@@ -88,14 +88,15 @@ class SubmitItExecutor(AbstractTaskExecutor):
 
         self.internal_executor.update_parameters(**DEFAULT_PARAMS,
                                                  slurm_additional_parameters=slurm_additional_parameters)
-        job = self.internal_executor.submit(task.run)
-        task.slurmjob = job
-        self.running_jobs.append(job)
+
+        slurmjob = self.internal_executor.submit(task.run)
+        task.slurmjob = slurmjob
+        self.running_slurmjobs.append(slurmjob)
         self.running_tasks.append(task)
         return
 
     def wait_for_all(self):
-        for job in self.running_jobs:
+        for job in self.running_slurmjobs:
             job.result()
 
     def handles_dependencies(self):

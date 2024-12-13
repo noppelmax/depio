@@ -3,10 +3,12 @@ from __future__ import annotations
 import pathlib
 import typing
 from io import StringIO
+from operator import truediv
 from os.path import getmtime
 from typing import List, Dict, Callable, get_origin, Annotated, get_args, Union
 import sys
 
+from .SkipMode import SkipMode
 from .TaskStatus import TaskStatus, TERMINAL_STATES, SUCCESSFUL_TERMINAL_STATES, FAILED_TERMINAL_STATES
 from .stdio_helpers import redirect, stop_redirect
 from .exceptions import ProductNotProducedException, TaskRaisedExceptionException, UnknownStatusException, ProductNotUpdatedException, \
@@ -25,7 +27,7 @@ class IgnoredForEq():
     pass
 
 
-status_colors = {
+_status_colors = {
     TaskStatus.WAITING: 'blue',
     TaskStatus.DEPFAILED: 'red',
     TaskStatus.PENDING: 'blue',
@@ -36,6 +38,17 @@ status_colors = {
     TaskStatus.FAILED: 'red',
     TaskStatus.CANCELED: 'white',
     TaskStatus.UNKNOWN: 'white'
+}
+
+_status_texts = {
+    TaskStatus.PENDING: 'pending',
+    TaskStatus.RUNNING: 'running',
+    TaskStatus.FINISHED: 'finished',
+    TaskStatus.SKIPPED: 'skipped',
+    TaskStatus.HOLD: 'hold',
+    TaskStatus.FAILED: 'failed',
+    TaskStatus.CANCELED: 'cancelled',
+    TaskStatus.UNKNOWN: 'unknown'
 }
 
 
@@ -91,45 +104,67 @@ def _get_not_updated_products(product_timestamps_after_running: typing.Dict, pro
 
 class Task:
     def __init__(self, name: str, func: Callable, func_args: List = None, func_kwargs: List = None,
-                 produces: List[pathlib.Path] = None, depends_on: List[Union[pathlib.Path, Task]] = None):
-        produces = produces if produces is not None else []
-        depends_on = depends_on if depends_on is not None else []
+                 produces: List[pathlib.Path] = None, depends_on: List[Union[pathlib.Path, Task]] = None,
+                 skipmode : SkipMode = SkipMode.IF_MISSING ):
+
+
+        produces : List[pathlib.Path] = produces or []
+        depends_on : List[Union[pathlib.Path, Task]] = depends_on or []
 
         self._status: TaskStatus = TaskStatus.WAITING
         self.name: str = name
-        self.queue_id: int = None
+        self._queue_id: int|None = None
         self.slurmjob = None
-        self.func = func
+        self.func : Callable = func
         self.func_args: List = func_args or []
         self.func_kwargs: Dict = func_kwargs or {}
+        self.skipmode : SkipMode = skipmode
 
-        # Parse dependencies and products from the annotations and merge with args
-        self.products_args: List[str] = _parse_annotation_for_metaclass(func, Product)
-        self.dependencies_args: List[str] = _parse_annotation_for_metaclass(func, Dependency)
-        self.ignored_for_eq_args: List[str] = _parse_annotation_for_metaclass(func, IgnoredForEq)
-        args_dict: Dict[str,typing.Any] = _get_args_dict(func, self.func_args, self.func_kwargs)
-        self.products: List[pathlib.Path] = [args_dict[argname] for argname in self.products_args if argname in args_dict] + produces
-        self.dependencies: List[Union[Task, pathlib.Path]] = [args_dict[argname] for argname in self.dependencies_args if
-                                                              argname in args_dict] + depends_on
-        self.cleaned_args: Dict[str,typing.Any] = { k:v for k,v in args_dict.items() if k not in self.ignored_for_eq_args }
-        self.stdout = StringIO()
+        self.stdout : StringIO = StringIO()
         self.slurmjob = None
         self._slurmid = None
-        self._slurmstate = ""
+        self._slurmstate : str = ""
+
+        # Parse dependencies and products from the annotations and merge with args
+        products_args: List[str] = _parse_annotation_for_metaclass(func, Product)
+        dependencies_args: List[str] = _parse_annotation_for_metaclass(func, Dependency)
+        ignored_for_eq_args: List[str] = _parse_annotation_for_metaclass(func, IgnoredForEq)
+
+        args_dict: Dict[str,typing.Any] = _get_args_dict(func, self.func_args, self.func_kwargs)
+        self.cleaned_args: Dict[str, typing.Any] = {k: v for k, v in args_dict.items() if k not in ignored_for_eq_args}
+
+        self.products: List[pathlib.Path] = \
+            ([args_dict[argname] for argname in products_args if argname in args_dict] + produces)
+        self.dependencies: List[Union[Task, pathlib.Path]] = \
+            ([args_dict[argname] for argname in dependencies_args if argname in args_dict] + depends_on)
+
+        # Gets filled by Pipeline
+        self.path_dependencies = None
+        self.task_dependencies = None
 
     def __str__(self):
         return f"Task:{self.name}"
 
+    def should_run(self, missing_products : List[pathlib.Path]) -> bool:
+        if self.skipmode == SkipMode.ALWAYS:
+            return True
+        elif self.skipmode == SkipMode.IF_MISSING:
+            return len(missing_products) > 0
+        elif self.skipmode == SkipMode.NEVER:
+            return False
+        else:
+            raise Exception(f"Unkown skipmode: {self.skipmode}")
 
     def _check_path_dependencies(self):
-        not_existing_path_dependencies: List[str] = [str(dependency) for dependency in self.path_dependencies if
-                                                     not dependency.exists()]
+        not_existing_path_dependencies: List[str] = \
+            [str(dependency) for dependency in self.path_dependencies if not dependency.exists()]
+
         if len(not_existing_path_dependencies) > 0:
             self._status = TaskStatus.FAILED
             raise DependencyNotMetException(
                 f"Task {self.name}: Dependency/ies {not_existing_path_dependencies} not met.")
 
-    def _check_for_existing_products(self):
+    def _check_existence_of_products(self):
         not_existing_products: List[str] = [str(product) for product in self.products if not product.exists()]
         if len(not_existing_products) > 0:
             self._status = TaskStatus.FAILED
@@ -161,7 +196,7 @@ class Task:
             stop_redirect()
 
         # Check if any product does not exist.
-        self._check_for_existing_products()
+        self._check_existence_of_products()
 
         # Check if any product has not been updated.
         product_timestamps_after_running: Dict[str, float] = self._get_timestamp_of_products()
@@ -172,61 +207,64 @@ class Task:
 
         self._status = TaskStatus.FINISHED
 
+    def _set_status_by_slurmstate(self, slurmstate):
+
+        if slurmstate in ['RUNNING', 'CONFIGURING', 'COMPLETING', 'STAGE_OUT']:
+            _status = TaskStatus.RUNNING
+        elif slurmstate in ['FAILED', 'BOOT_FAIL', 'DEADLINE', 'NODE_FAIL', 'OUT_OF_MEMORY',
+                            'PREEMPTED', 'SPECIAL_EXIT', 'STOPPED', 'SUSPENDED', 'TIMEOUT']:
+            _status = TaskStatus.FAILED
+        elif slurmstate in ['READY', 'PENDING', 'REQUEUE_FED', 'REQUEUED']:
+            _status = TaskStatus.PENDING
+        elif slurmstate == 'CANCELED':
+            _status = TaskStatus.CANCELED
+        elif slurmstate in ['COMPLETED']:
+            _status = TaskStatus.FINISHED
+        elif slurmstate in ['RESV_DEL_HOLD', 'REQUEUE_HOLD', 'RESIZING', 'REVOKED', 'SIGNALING']:
+            _status = TaskStatus.HOLD
+        elif slurmstate in ['UNKNOWN']:
+            _status = TaskStatus.UNKNOWN
+        else:
+            raise Exception(f"Unknown slurmjob status! -> {slurmstate} ")
+
+        self._status = _status
+        return _status
+
     def _update_by_slurmjob(self):
         assert self.slurmjob is not None
-        self.slurmjob.watcher.update()
-        self._slurmstate = self.slurmjob.state
-        self._slurmid = f"{int(self.slurmjob.job_id):d}-{int(self.slurmjob.task_id):d}"
 
-        if self._slurmstate in ['RUNNING', 'CONFIGURING', 'COMPLETING', 'STAGE_OUT']:
-            self._status = TaskStatus.RUNNING
-        elif self._slurmstate in ['FAILED', 'BOOT_FAIL', 'DEADLINE', 'NODE_FAIL', 'OUT_OF_MEMORY', 'PREEMPTED', 'SPECIAL_EXIT', 'STOPPED',
-                                  'SUSPENDED', 'TIMEOUT']:
-            self._status = TaskStatus.FAILED
-        elif self._slurmstate in ['READY', 'PENDING', 'REQUEUE_FED', 'REQUEUED']:
-            self._status = TaskStatus.PENDING
-        elif self._slurmstate == 'CANCELED':
-            self._status = TaskStatus.CANCELED
-        elif self._slurmstate in ['COMPLETED']:
-            self._status = TaskStatus.FINISHED
-        elif self._slurmstate in ['RESV_DEL_HOLD', 'REQUEUE_HOLD', 'RESIZING', 'REVOKED', 'SIGNALING']:
-            self._status = TaskStatus.HOLD
-        elif self._slurmstate == 'UNKNOWN':
-            self._status = TaskStatus.UNKNOWN
-        else:
-            raise Exception(f"Unknown slurmjob status! slurmjob.done {self.slurmjob.done}, slurmjob.state {self.slurmjob.state} ")
+        self.slurmjob.watcher.update()
+
+        self._slurmstate = self.slurmjob.state
+        self._set_status_by_slurmstate(self._slurmstate)
+
+        self._slurmid = f"{int(self.slurmjob.job_id):d}-{int(self.slurmjob.task_id):d}"
 
     @property
     def slurmjob_status(self):
-        if not self.slurmjob is None:
-            if self._slurmstate is None: self._update_by_slurmjob()
-            return self._slurmstate
-        else:
-            return ""
+        if self.slurmjob is None: return ""
+
+        if self._slurmstate is None: self._update_by_slurmjob()
+        return self._slurmstate
 
     def statuscolor(self, s: TaskStatus = None) -> str:
         if s is None: s = self._status
-        if s in status_colors:
-            return status_colors[s]
+        if s in _status_colors:
+            return _status_colors[s]
         else:
-            raise UnknownStatusException("Status {} is unknown.".format(s))
+            raise UnknownStatusException(f"Status {s} is unknown.")
 
     def statustext(self, s: TaskStatus = None) -> str:
         if s is None: s = self._status
+        if s in _status_texts:
+            return _status_texts[s]
+
         status_messages = {
-            TaskStatus.WAITING: lambda: 'waiting' + (f" for {[d.queue_id for d in self.task_dependencies if not d.is_in_terminal_state]}" if len(
+            TaskStatus.WAITING: lambda: 'waiting' + (f" for {[d._queue_id for d in self.task_dependencies if not d.is_in_terminal_state]}" if len(
                 [d for d in self.task_dependencies if not d.is_in_terminal_state]) > 1 else ""),
             TaskStatus.DEPFAILED: lambda: 'dep. failed' + (
-                f" at {[d.queue_id for d in self.task_dependencies if d.is_in_failed_terminal_state]}" if len(
-                    [d for d in self.task_dependencies if d.is_in_failed_terminal_state]) > 1 else ""),
-            TaskStatus.PENDING: lambda: 'pending',
-            TaskStatus.RUNNING: lambda: 'running',
-            TaskStatus.FINISHED: lambda: 'finished',
-            TaskStatus.SKIPPED: lambda: 'skipped',
-            TaskStatus.HOLD: lambda: 'hold',
-            TaskStatus.FAILED: lambda: 'failed',
-            TaskStatus.CANCELED: lambda: 'cancelled',
-            TaskStatus.UNKNOWN: lambda: 'unknown'
+                f" at {[d._queue_id for d in self.task_dependencies if d.is_in_failed_terminal_state]}" if len(
+                    [d for d in self.task_dependencies if d.is_in_failed_terminal_state]) > 1 else "")
         }
         try:
             return status_messages[s]()
@@ -235,8 +273,14 @@ class Task:
 
     @property
     def status(self):
-        s = self._status  # Fix status as temporary to return a consistent tuple
-        return s, self.statustext(s), self.statuscolor(s), self._slurmstate
+        if self.slurmjob is None:
+            s = self._status
+            slurmstate = ""
+        else:
+            if self._slurmstate is None: self._update_by_slurmjob()
+            slurmstate = self._slurmstate
+            s = self._set_status_by_slurmstate(slurmstate)
+        return s, self.statustext(s), self.statuscolor(s), slurmstate
 
     @property
     def is_in_terminal_state(self) -> bool:
@@ -255,22 +299,21 @@ class Task:
 
     @property
     def id(self) -> str:
-        return f"{self.queue_id: 4d}"
+        return f"{self._queue_id: 4d}"
 
     @property
     def slurmid(self) -> str:
-        if not self.slurmjob is None:
-            self._update_by_slurmjob()
-            return f"{self._slurmid}"
-        else:
+        if self.slurmjob is None:
             return ""
+
+        self._update_by_slurmjob()
+        return f"{self._slurmid}"
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
-            b = (self.func == other.func
-                 and self.cleaned_args == other.cleaned_args
-                 and self.name == other.name)
-            return b
+            return (self.func == other.func
+                    and self.cleaned_args == other.cleaned_args
+                    and self.name == other.name)
         else:
             return False
 

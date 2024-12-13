@@ -1,3 +1,4 @@
+import pathlib
 from typing import Set, Dict, List
 from pathlib import Path
 import time
@@ -17,9 +18,12 @@ class Pipeline:
                  clear_screen: bool = True,
                  quiet: bool = False,
                  refreshrate: float = 1.0):
+
+        # Flags
         self.CLEAR_SCREEN: bool = clear_screen
         self.QUIET: bool = quiet
         self.REFRESHRATE: float = refreshrate
+
 
         self.name: str = name
         self.submitted_tasks: List[Task] = None
@@ -29,6 +33,7 @@ class Pipeline:
         if not self.QUIET: print("Pipeline initialized")
 
     def add_task(self, task: Task) -> None:
+
         # Check if the exact task is already registered
         for registered_task in self.tasks:
             if task == registered_task:
@@ -39,12 +44,14 @@ class Pipeline:
         products_already_registered: List[str] = [str(p) for p in task.products if str(p) in set(map(str, self.registered_products))]
         if len(products_already_registered) > 0:
             raise ProductAlreadyRegisteredException(
-                f"The product\s {products_already_registered} is/are already registered. Each output can only be registered from one task.")
+                f"The product\s {products_already_registered} is/are already registered. "
+                f"Each output can only be registered from one task.")
 
         # Check if the task dependencies are registered already
         missing_tasks: List[Task] = [t for t in task.dependencies if isinstance(t, Task) and t not in self.tasks]
         if len(missing_tasks) > 0:
-            raise TaskNotInQueueException("Add the tasks into the queue in the correct order. The following task/s is/are missing: {missing_tasks}.")
+            raise TaskNotInQueueException(f"Add the tasks into the queue in the correct order. "
+                                          f"The following task/s is/are missing: {missing_tasks}.")
 
         # Register products
         self.registered_products.update(task.products)
@@ -67,11 +74,14 @@ class Pipeline:
             # Verify that each dependency is available and add if yes.
             unavailable_dependencies = [d for d in path_deps if d not in product_to_task and not d.exists()]
             if len(unavailable_dependencies) > 0:
-                raise DependencyNotAvailableException(f"Dependency/ies '{unavailable_dependencies}' do/es not exist and can not be produced.")
+                raise DependencyNotAvailableException(f"Dependency/ies '{unavailable_dependencies}' "
+                                                      f"do/es not exist and can not be produced.")
 
             # Add the tasks that produce path_deps and remove such deps from the path_deps
-            task.task_dependencies = ([product_to_task[d] for d in path_deps if d in product_to_task] + task_deps)
-            task.path_dependencies = [d for d in path_deps if d not in product_to_task]
+            task.task_dependencies : List[Task] = \
+                ([product_to_task[d] for d in path_deps if d in product_to_task] + task_deps)
+            task.path_dependencies : List[Path] = \
+                [d for d in path_deps if d not in product_to_task]
 
     def _submit_task(self, task: Task) -> bool:
         """
@@ -98,20 +108,21 @@ class Pipeline:
                 task.set_to_depfailed()  # set to depfailed
                 is_new_depfail_found = True  # Remember that we propagated dependency failures
 
-        for p_dep in task.path_dependencies:
+        missing_products : List[Path] = [p_dep for p_dep in task.path_dependencies if not p_dep.exists()]
+        for p_dep in missing_products:
             assert isinstance(p_dep, Path)
-            if not p_dep.exists():
-                all_dependencies_are_available = False
+            all_dependencies_are_available = False
 
-                if not task.is_in_failed_terminal_state:
-                    # If the task is not already in failed state:
-                    task.set_to_depfailed()  # set to depfailed
-                    is_new_depfail_found = True  # Remember that we propagated dependency failures
+            if not task.is_in_failed_terminal_state:
+                # If the task is not already in failed state:
+                task.set_to_depfailed()  # set to depfailed
+                is_new_depfail_found = True  # Remember that we propagated dependency failures
 
         # Execute the task if all dependencies are given
         if all_dependencies_are_available or self.depioExecutor.handles_dependencies():
-            self.depioExecutor.submit(task, task.task_dependencies)
-            self.submitted_tasks.append(task)
+            if task.should_run(missing_products):
+                self.depioExecutor.submit(task, task.task_dependencies)
+                self.submitted_tasks.append(task)
 
         return is_new_depfail_found
 
@@ -125,8 +136,7 @@ class Pipeline:
             try:
                 # Iterate over all tasks in the queue until now new depfail is found
                 while True:
-                    if all(not self._submit_task(task) for task in self.tasks):
-                        break
+                    if any(self._submit_task(task) for task in self.tasks): break
 
                 # Check the status of all tasks
                 all_tasks_in_terminal_state = all(task.is_in_terminal_state for task in self.tasks)
