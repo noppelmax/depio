@@ -120,18 +120,34 @@ class Task:
     def __str__(self):
         return f"Task:{self.name}"
 
+
+    def _check_path_dependencies(self):
+        not_existing_path_dependencies: List[str] = [str(dependency) for dependency in self.path_dependencies if
+                                                     not dependency.exists()]
+        if len(not_existing_path_dependencies) > 0:
+            self._status = TaskStatus.FAILED
+            raise DependencyNotMetException(
+                f"Task {self.name}: Dependency/ies {not_existing_path_dependencies} not met.")
+
+    def _check_for_existing_products(self):
+        not_existing_products: List[str] = [str(product) for product in self.products if not product.exists()]
+        if len(not_existing_products) > 0:
+            self._status = TaskStatus.FAILED
+            raise ProductNotProducedException(f"Task {self.name}: Product/s {not_existing_products} not produced.")
+
+
+    def _get_timestamp_of_products(self) -> Dict[str, float]:
+        return {str(product): getmtime(product) for product in self.products if product.exists()}
+
     def run(self):
 
         redirect(self.stdout)
 
         # Check if all path dependencies are met
-        not_existing_path_dependencies: List[str] = [str(dependency) for dependency in self.path_dependencies if not dependency.exists()]
-        if len(not_existing_path_dependencies) > 0:
-            self._status = TaskStatus.FAILED
-            raise DependencyNotMetException(f"Task {self.name}: Dependency/ies {not_existing_path_dependencies} not met.")
+        self._check_path_dependencies()
 
         # Store the last-modification timestamp of the already existing products.
-        product_timestamps_before_running: Dict[str, float] = {str(product): getmtime(product) for product in self.products if product.exists()}
+        product_timestamps_before_running: Dict[str, float] = self._get_timestamp_of_products()
 
         # Call the actual function
         self._status = TaskStatus.RUNNING
@@ -145,16 +161,11 @@ class Task:
             stop_redirect()
 
         # Check if any product does not exist.
-        not_existing_products: List[str] = [str(product) for product in self.products if not product.exists()]
-        if len(not_existing_products) > 0:
-            self._status = TaskStatus.FAILED
-            raise ProductNotProducedException(f"Task {self.name}: Product/s {not_existing_products} not produced.")
+        self._check_for_existing_products()
 
         # Check if any product has not been updated.
-        product_timestamps_after_running: Dict = {str(product): getmtime(product) for product in self.products if product.exists()}
-
+        product_timestamps_after_running: Dict[str, float] = self._get_timestamp_of_products()
         not_updated_products = _get_not_updated_products(product_timestamps_after_running, product_timestamps_before_running)
-
         if len(not_updated_products) > 0:
             self._status = TaskStatus.FAILED
             raise ProductNotUpdatedException(f"Task {self.name}: Product/s {not_updated_products} not updated.")
