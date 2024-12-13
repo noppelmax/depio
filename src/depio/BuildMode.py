@@ -3,7 +3,7 @@
 import enum
 
 
-class SkipMode(enum.Enum):
+class BuildMode(enum.Enum):
     NEVER = enum.auto()
     IF_MISSING = enum.auto()
     ALWAYS = enum.auto()

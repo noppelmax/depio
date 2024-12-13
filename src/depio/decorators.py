@@ -1,12 +1,12 @@
+from .BuildMode import BuildMode
 from .Pipeline import Pipeline
-from .SkipMode import SkipMode
 from .Task import Task
 
-def task(name : str|None, pipeline : Pipeline|None = None, skipmode : SkipMode = SkipMode.IF_MISSING, *dec_args, **dec_kwargs):
+def task(name : str|None, pipeline : Pipeline|None = None, buildmode : BuildMode =BuildMode.IF_MISSING, *dec_args, **dec_kwargs):
     def wrapper(func):
         def decorator(*func_args, **func_kwargs):
             # Create and add the task
-            t = Task(name, func=func, skipmode=skipmode, func_args=func_args, func_kwargs=func_kwargs)
+            t = Task(name, func=func, buildmode=buildmode, func_args=func_args, func_kwargs=func_kwargs)
 
             # Not call the function!
 

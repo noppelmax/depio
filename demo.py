@@ -2,6 +2,7 @@ from typing import Annotated
 import pathlib
 import time
 
+from depio.BuildMode import BuildMode
 from depio.Executors import DemoTaskExecutor
 from depio.Pipeline import Pipeline
 from depio.decorators import task
@@ -14,7 +15,7 @@ depioExecutor = ParallelExecutor()
 defaultpipeline = Pipeline(depioExecutor=depioExecutor, clear_screen=False)
 
 # Use the decorator with args and kwargs
-@task("datapipeline")
+@task("datapipeline", buildmode=BuildMode.ALWAYS)
 def funcdec(
         output: Annotated[pathlib.Path, Product],
         sec: int,
@@ -32,6 +33,7 @@ def funcdec(
 BLD = pathlib.Path("build")
 BLD.mkdir(exist_ok=True)
 
+print("Adding tasks")
 defaultpipeline.add_task(funcdec(BLD/"output1.txt",sec=2,input=BLD/"input.txt"))
 t1 = defaultpipeline.add_task(funcdec(BLD/"output2.txt",sec=1,input=BLD/"input.txt"))
 defaultpipeline.add_task(funcdec(BLD/"final1.txt",sec=1,input=BLD/"output1.txt"))

@@ -8,7 +8,7 @@ from os.path import getmtime
 from typing import List, Dict, Callable, get_origin, Annotated, get_args, Union
 import sys
 
-from .SkipMode import SkipMode
+from .BuildMode import BuildMode
 from .TaskStatus import TaskStatus, TERMINAL_STATES, SUCCESSFUL_TERMINAL_STATES, FAILED_TERMINAL_STATES
 from .stdio_helpers import redirect, stop_redirect
 from .exceptions import ProductNotProducedException, TaskRaisedExceptionException, UnknownStatusException, ProductNotUpdatedException, \
@@ -105,7 +105,7 @@ def _get_not_updated_products(product_timestamps_after_running: typing.Dict, pro
 class Task:
     def __init__(self, name: str, func: Callable, func_args: List = None, func_kwargs: List = None,
                  produces: List[pathlib.Path] = None, depends_on: List[Union[pathlib.Path, Task]] = None,
-                 skipmode : SkipMode = SkipMode.IF_MISSING ):
+                 buildmode : BuildMode = BuildMode.IF_MISSING ):
 
 
         produces : List[pathlib.Path] = produces or []
@@ -118,7 +118,7 @@ class Task:
         self.func : Callable = func
         self.func_args: List = func_args or []
         self.func_kwargs: Dict = func_kwargs or {}
-        self.skipmode : SkipMode = skipmode
+        self.buildmode : BuildMode = buildmode
 
         self.stdout : StringIO = StringIO()
         self.stderr: StringIO = StringIO()
@@ -147,11 +147,11 @@ class Task:
         return f"Task:{self.name}"
 
     def should_run(self, missing_products : List[pathlib.Path]) -> bool:
-        if self.skipmode == SkipMode.ALWAYS:
+        if self.buildmode == BuildMode.ALWAYS:
             return True
-        elif self.skipmode == SkipMode.IF_MISSING:
+        elif self.buildmode == BuildMode.IF_MISSING:
             return len(missing_products) > 0
-        elif self.skipmode == SkipMode.NEVER:
+        elif self.buildmode == BuildMode.NEVER:
             return False
         else:
             raise Exception(f"Unkown skipmode: {self.skipmode}")
@@ -298,9 +298,15 @@ class Task:
     def set_to_depfailed(self) -> None:
         self._status = TaskStatus.DEPFAILED
 
+    def set_to_skipped(self) -> None:
+        self._status = TaskStatus.SKIPPED
+
     @property
     def id(self) -> str:
-        return f"{self._queue_id: 4d}"
+        if self._queue_id:
+            return f"{self._queue_id: 4d}"
+        else:
+            return "None"
 
     @property
     def slurmid(self) -> str:

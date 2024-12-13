@@ -96,20 +96,8 @@ class Pipeline:
         all_dependencies_are_available = True
         is_new_depfail_found = False
 
-        # Execute and check all dependencies first
-        for t_dep in task.task_dependencies:
-            assert isinstance(t_dep, Task)
-            self._submit_task(t_dep)  # Recursive call for dependency
-            if not t_dep.is_in_successful_terminal_state:
-                all_dependencies_are_available = False
-
-            if t_dep.is_in_failed_terminal_state and not task.is_in_failed_terminal_state:
-                # If the task is not already in failed state:
-                task.set_to_depfailed()  # set to depfailed
-                is_new_depfail_found = True  # Remember that we propagated dependency failures
-
-        missing_products : List[Path] = [p_dep for p_dep in task.path_dependencies if not p_dep.exists()]
-        for p_dep in missing_products:
+        missing_deps : List[Path] = [p_dep for p_dep in task.path_dependencies if not p_dep.exists()]
+        for p_dep in missing_deps:
             assert isinstance(p_dep, Path)
             all_dependencies_are_available = False
 
@@ -118,11 +106,34 @@ class Pipeline:
                 task.set_to_depfailed()  # set to depfailed
                 is_new_depfail_found = True  # Remember that we propagated dependency failures
 
+        missing_products: List[Path] = [p for p in task.products if not p.exists()]
+        if not task.should_run(missing_products):
+            task.set_to_skipped()
+
+        # Execute and check all dependencies first
+        for t_dep in task.task_dependencies:
+            assert isinstance(t_dep, Task)
+            self._submit_task(t_dep)  # Recursive call for dependency
+            if not t_dep.is_in_successful_terminal_state:
+                all_dependencies_are_available = False
+
+            if t_dep.is_in_failed_terminal_state and not task.is_in_terminal_state:
+                # If the task is not already in failed state:
+                task.set_to_depfailed()  # set to depfailed
+                is_new_depfail_found = True  # Remember that we propagated dependency failures
+
+
         # Execute the task if all dependencies are given
-        if all_dependencies_are_available or self.depioExecutor.handles_dependencies():
-            if task.should_run(missing_products):
+        if (all_dependencies_are_available or self.depioExecutor.handles_dependencies()
+                or not task.should_run(missing_products)):
+
+            if not task.should_run(missing_products):
+                task.set_to_skipped()
+            else:
                 self.depioExecutor.submit(task, task.task_dependencies)
-                self.submitted_tasks.append(task)
+
+            self.submitted_tasks.append(task)
+
 
         return is_new_depfail_found
 
@@ -136,7 +147,7 @@ class Pipeline:
             try:
                 # Iterate over all tasks in the queue until now new depfail is found
                 while True:
-                    if any(self._submit_task(task) for task in self.tasks): break
+                    if all(not self._submit_task(task) for task in self.tasks): break
 
                 # Check the status of all tasks
                 all_tasks_in_terminal_state = all(task.is_in_terminal_state for task in self.tasks)
