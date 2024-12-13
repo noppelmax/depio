@@ -197,6 +197,9 @@ class Pipeline:
                     print(f"Details for Task ID: {task.id} - Name: {task.name}")
                     print(tabulate([[task.stdout.getvalue()]], headers=["STDOUT"], tablefmt="grid"))
 
+        print("Canceling running jobs...")
+        self.depioExecutor.cancel_all_jobs()
+
         print("Exit.")
         exit(1)
 

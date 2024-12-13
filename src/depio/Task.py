@@ -121,6 +121,7 @@ class Task:
         self.skipmode : SkipMode = skipmode
 
         self.stdout : StringIO = StringIO()
+        self.stderr: StringIO = StringIO()
         self.slurmjob = None
         self._slurmid = None
         self._slurmstate : str = ""
@@ -316,6 +317,16 @@ class Task:
                     and self.name == other.name)
         else:
             return False
+
+    def get_stderr(self):
+        if self.slurmjob is None:
+            self.stderr.getvalue()
+        return self.slurmjob.stderr()
+
+    def get_stdout(self):
+        if self.slurmjob is None:
+            self.stdout.getvalue()
+        return self.slurmjob.stdout()
 
 
 __all__ = [Task, Product, Dependency, _get_not_updated_products]

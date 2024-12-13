@@ -18,8 +18,14 @@ class AbstractTaskExecutor(ABC):
     def wait_for_all(self):
         ...
 
+    @abstractmethod
+    def cancel_all_jobs(self):
+        ...
+
+    @abstractmethod
     def handles_dependencies(self):
         ...
+
 
 
 @frozen
@@ -32,6 +38,9 @@ class DemoTaskExecutor(AbstractTaskExecutor):
         task.run()
 
     def wait_for_all(self):
+        pass
+
+    def cancel_all_jobs(self):
         pass
 
     def handles_dependencies(self):
@@ -56,6 +65,9 @@ class ParallelExecutor(AbstractTaskExecutor):
         for job in self.running_jobs:
             job.result()
 
+    def cancel_all_jobs(self):
+        pass
+
     def handles_dependencies(self):
         return False
 
@@ -75,12 +87,12 @@ class SubmitItExecutor(AbstractTaskExecutor):
         self.internal_executor = internal_executor if internal_executor is not None else submitit.AutoExecutor(
             folder=folder)
         self.internal_executor.update_parameters(**DEFAULT_PARAMS)
-        self.running_slurmjobs = []
-        self.running_tasks = []
+        self.slurmjobs = []
         print("depio-SubmitItExecutor initialized")
 
     def submit(self, task, task_dependencies: List[Task] = None):
         slurm_additional_parameters = {}
+
         afterok: List[str] = [f"{t.slurmjob.job_id}" for t in task_dependencies]
 
         if len(afterok) > 0:
@@ -91,13 +103,16 @@ class SubmitItExecutor(AbstractTaskExecutor):
 
         slurmjob = self.internal_executor.submit(task.run)
         task.slurmjob = slurmjob
-        self.running_slurmjobs.append(slurmjob)
-        self.running_tasks.append(task)
+        self.slurmjobs.append(slurmjob)
         return
 
     def wait_for_all(self):
-        for job in self.running_slurmjobs:
+        for job in self.slurmjobs:
             job.result()
+
+    def cancel_all_jobs(self):
+        for job in self.slurmjobs:
+            job.cancel()
 
     def handles_dependencies(self):
         return True
