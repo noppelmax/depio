@@ -29,12 +29,16 @@ class AbstractTaskExecutor(ABC):
 
 
 @frozen
-class DemoTaskExecutor(AbstractTaskExecutor):
+class SequentialExecutor(AbstractTaskExecutor):
     """
     A very dumb executor, that is just executing a given task right away.
+    It can be used for debugging purposes.
     """
 
     def submit(self, task, task_dependencies: List[Task] = None):
+        print("==========================================================")
+        print(f"I'm going to run task <{task.name}> now")
+        print("==========================================================")
         task.run()
 
     def wait_for_all(self):
