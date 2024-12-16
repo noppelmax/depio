@@ -266,6 +266,23 @@ python demo_hydra.py -m attack=ours,otherattack1,otherattack2
 Or you can use it for sweeps also.
 
 
+## How to skip/build Tasks
+To use different skip and build mode you can set the `buildmode` parameter, when creating the task.
+
+```python
+@task("datapipeline", buildmode=BuildMode.ALWAYS)
+def funcdec(output: Annotated[pathlib.Path, Product]):
+
+    with open(output,'w') as f:
+        f.write("Hallo from depio")
+    return 1
+```
+
+There are three values to chose from
+- `BuildMode.NEVER`: Run this task never
+- `BuildMode.IF_MISSING`: Run this tasks if one of the output files is missing
+- `BuildMode.ALWAYS`: Always run this task
+
 ## How to develop
 Create an editable egg and install it.
 
