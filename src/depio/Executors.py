@@ -123,4 +123,4 @@ class SubmitItExecutor(AbstractTaskExecutor):
         return True
 
 
-__all__ = [AbstractTaskExecutor, ParallelExecutor, DemoTaskExecutor, SubmitItExecutor]
+__all__ = [AbstractTaskExecutor, ParallelExecutor, SequentialExecutor, SubmitItExecutor]
