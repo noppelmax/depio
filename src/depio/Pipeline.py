@@ -158,10 +158,12 @@ class Pipeline:
                     else:
                         self.exit_successful()
 
+                time.sleep(self.REFRESHRATE)
+
             except KeyboardInterrupt:
                 print("Stopping execution bc of keyboard interrupt!")
-                exit(1)
-            time.sleep(self.REFRESHRATE)
+                self.exit_with_failed_tasks()
+
 
     def _get_text_for_task(self, task):
         status = task.status
