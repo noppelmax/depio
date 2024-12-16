@@ -97,7 +97,8 @@ class SubmitItExecutor(AbstractTaskExecutor):
     def submit(self, task, task_dependencies: List[Task] = None):
         slurm_additional_parameters = {}
 
-        afterok: List[str] = [f"{t.slurmjob.job_id}" for t in task_dependencies]
+        tasks_with_slurmjob = [t for t in task_dependencies if t.slurmjob is not None]
+        afterok: List[str] = [f"{t.slurmjob.job_id}" for t in tasks_with_slurmjob]
 
         if len(afterok) > 0:
             slurm_additional_parameters["dependency"] = f"afterok:{':'.join(afterok)}"
