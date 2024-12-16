@@ -87,7 +87,7 @@ DEFAULT_PARAMS = {
 
 class SubmitItExecutor(AbstractTaskExecutor):
 
-    def __init__(self, folder: Path, internal_executor=None, **kwargs):
+    def __init__(self, folder: Path=None, internal_executor=None, **kwargs):
         self.internal_executor = internal_executor if internal_executor is not None else submitit.AutoExecutor(
             folder=folder)
         self.internal_executor.update_parameters(**DEFAULT_PARAMS)
