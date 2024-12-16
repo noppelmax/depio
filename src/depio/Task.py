@@ -223,10 +223,11 @@ class Task:
             _status = TaskStatus.FINISHED
         elif slurmstate in ['RESV_DEL_HOLD', 'REQUEUE_HOLD', 'RESIZING', 'REVOKED', 'SIGNALING']:
             _status = TaskStatus.HOLD
-        elif slurmstate in ['UNKNOWN','',' ']:
+        elif slurmstate in ['UNKNOWN']:
             _status = TaskStatus.UNKNOWN
         else:
-            raise Exception(f"Unknown slurmjob status! -> {slurmstate} ")
+            print(f"Unknown slurmjob status! -> {slurmstate} ")
+            _status = TaskStatus.UNKNOWN
 
         self._status = _status
         return _status
