@@ -58,7 +58,7 @@ class Pipeline:
 
         # Register task
         self.tasks.append(task)
-        task.queue_id = len(self.tasks)
+        task._queue_id = len(self.tasks) # TODO Fix this!
         return task
 
     def _solve_order(self) -> None:
