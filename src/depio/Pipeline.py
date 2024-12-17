@@ -176,7 +176,7 @@ class Pipeline:
             task.slurmid,
             formatted_slurmstatus,
             formatted_status,
-            [t.queue_id for t in task.task_dependencies],
+            [t.id for t in task.task_dependencies],
             [str(d) for d in task.dependencies if isinstance(d, Path)],
             [str(p) for p in task.products]
         ]
