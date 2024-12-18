@@ -57,7 +57,7 @@ class LocalProxy:
     __slots__ = ("__local", "__dict__", "__name__", "__wrapped__")
 
     def __init__(
-        self, local: Union[Any, "LocalProxy"], name: Optional[str] = None,
+            self, local: Union[Any, "LocalProxy"], name: Optional[str] = None,
     ) -> None:
         object.__setattr__(self, "_LocalProxy__local", local)
         object.__setattr__(self, "__name__", name)
@@ -66,7 +66,7 @@ class LocalProxy:
             # LocalManager: mark it as a wrapped function.
             object.__setattr__(self, "__wrapped__", local)
 
-    def _get_current_object(self,) -> object:
+    def _get_current_object(self, ) -> object:
         """Return the current object.  This is useful if you want the real
         object behind the proxy at a time for performance reasons or because
         you want to pass the object into a different context.
@@ -170,7 +170,7 @@ class LocalProxy:
     __deepcopy__ = lambda x, memo: copy.deepcopy(x._get_current_object(), memo)
 
 
-def redirect(stringio : StringIO):
+def redirect(stringio: StringIO):
     """
     Enables the redirect for the current thread's output to a single cStringIO
     object and returns the object.
@@ -214,6 +214,7 @@ def _get_stream(original):
     :return: The inner function for use in the LocalProxy object.
     :rtype: ``function``
     """
+
     def proxy():
         """
         Returns the original stream if the current thread is not proxied,
@@ -252,5 +253,6 @@ def disable_proxy():
     sys.__stderr__ = orig___stderr__
     sys.stdout = orig_stdout
     sys.stderr = orig_stderr
+
 
 __all__ = [redirect, stop_redirect, enable_proxy, disable_proxy]

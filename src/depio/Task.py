@@ -11,7 +11,8 @@ import sys
 from .BuildMode import BuildMode
 from .TaskStatus import TaskStatus, TERMINAL_STATES, SUCCESSFUL_TERMINAL_STATES, FAILED_TERMINAL_STATES
 from .stdio_helpers import redirect, stop_redirect
-from .exceptions import ProductNotProducedException, TaskRaisedExceptionException, UnknownStatusException, ProductNotUpdatedException, \
+from .exceptions import ProductNotProducedException, TaskRaisedExceptionException, UnknownStatusException, \
+    ProductNotUpdatedException, \
     DependencyNotMetException
 
 
@@ -91,7 +92,8 @@ def _parse_annotation_for_metaclass(func, metaclass) -> List[str]:
     return results
 
 
-def _get_not_updated_products(product_timestamps_after_running: typing.Dict, product_timestamps_before_running: typing.Dict) -> typing.List[str]:
+def _get_not_updated_products(product_timestamps_after_running: typing.Dict,
+                              product_timestamps_before_running: typing.Dict) -> typing.List[str]:
     # Calculate the not updated products
     not_updated_products = []
     for product, before_timestamp in product_timestamps_before_running.items():
@@ -105,33 +107,32 @@ def _get_not_updated_products(product_timestamps_after_running: typing.Dict, pro
 class Task:
     def __init__(self, name: str, func: Callable, func_args: List = None, func_kwargs: List = None,
                  produces: List[pathlib.Path] = None, depends_on: List[Union[pathlib.Path, Task]] = None,
-                 buildmode : BuildMode = BuildMode.IF_MISSING ):
+                 buildmode: BuildMode = BuildMode.IF_MISSING):
 
-
-        produces : List[pathlib.Path] = produces or []
-        depends_on : List[Union[pathlib.Path, Task]] = depends_on or []
+        produces: List[pathlib.Path] = produces or []
+        depends_on: List[Union[pathlib.Path, Task]] = depends_on or []
 
         self._status: TaskStatus = TaskStatus.WAITING
         self.name: str = name
-        self._queue_id: int|None = None
+        self._queue_id: int | None = None
         self.slurmjob = None
-        self.func : Callable = func
+        self.func: Callable = func
         self.func_args: List = func_args or []
         self.func_kwargs: Dict = func_kwargs or {}
-        self.buildmode : BuildMode = buildmode
+        self.buildmode: BuildMode = buildmode
 
-        self.stdout : StringIO = StringIO()
+        self.stdout: StringIO = StringIO()
         self.stderr: StringIO = StringIO()
         self.slurmjob = None
         self._slurmid = None
-        self._slurmstate : str = ""
+        self._slurmstate: str = ""
 
         # Parse dependencies and products from the annotations and merge with args
         products_args: List[str] = _parse_annotation_for_metaclass(func, Product)
         dependencies_args: List[str] = _parse_annotation_for_metaclass(func, Dependency)
         ignored_for_eq_args: List[str] = _parse_annotation_for_metaclass(func, IgnoredForEq)
 
-        args_dict: Dict[str,typing.Any] = _get_args_dict(func, self.func_args, self.func_kwargs)
+        args_dict: Dict[str, typing.Any] = _get_args_dict(func, self.func_args, self.func_kwargs)
         self.cleaned_args: Dict[str, typing.Any] = {k: v for k, v in args_dict.items() if k not in ignored_for_eq_args}
 
         self.products: List[pathlib.Path] = \
@@ -146,7 +147,7 @@ class Task:
     def __str__(self):
         return f"Task:{self.name}"
 
-    def should_run(self, missing_products : List[pathlib.Path]) -> bool:
+    def should_run(self, missing_products: List[pathlib.Path]) -> bool:
         if self.buildmode == BuildMode.ALWAYS:
             return True
         elif self.buildmode == BuildMode.IF_MISSING:
@@ -170,7 +171,6 @@ class Task:
         if len(not_existing_products) > 0:
             self._status = TaskStatus.FAILED
             raise ProductNotProducedException(f"Task {self.name}: Product/s {not_existing_products} not produced.")
-
 
     def _get_timestamp_of_products(self) -> Dict[str, float]:
         return {str(product): getmtime(product) for product in self.products if product.exists()}
@@ -201,7 +201,8 @@ class Task:
 
         # Check if any product has not been updated.
         product_timestamps_after_running: Dict[str, float] = self._get_timestamp_of_products()
-        not_updated_products = _get_not_updated_products(product_timestamps_after_running, product_timestamps_before_running)
+        not_updated_products = _get_not_updated_products(product_timestamps_after_running,
+                                                         product_timestamps_before_running)
         if len(not_updated_products) > 0:
             self._status = TaskStatus.FAILED
             raise ProductNotUpdatedException(f"Task {self.name}: Product/s {not_updated_products} not updated.")
@@ -262,8 +263,9 @@ class Task:
             return _status_texts[s]
 
         status_messages = {
-            TaskStatus.WAITING: lambda: 'waiting' + (f" for {[d._queue_id for d in self.task_dependencies if not d.is_in_terminal_state]}" if len(
-                [d for d in self.task_dependencies if not d.is_in_terminal_state]) > 1 else ""),
+            TaskStatus.WAITING: lambda: 'waiting' + (
+                f" for {[d._queue_id for d in self.task_dependencies if not d.is_in_terminal_state]}" if len(
+                    [d for d in self.task_dependencies if not d.is_in_terminal_state]) > 1 else ""),
             TaskStatus.DEPFAILED: lambda: 'dep. failed' + (
                 f" at {[d._queue_id for d in self.task_dependencies if d.is_in_failed_terminal_state]}" if len(
                     [d for d in self.task_dependencies if d.is_in_failed_terminal_state]) > 1 else "")

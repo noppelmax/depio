@@ -24,7 +24,6 @@ class Pipeline:
         self.QUIET: bool = quiet
         self.REFRESHRATE: float = refreshrate
 
-
         self.name: str = name
         self.submitted_tasks: List[Task] = None
         self.tasks: List[Task] = []
@@ -39,9 +38,9 @@ class Pipeline:
             if task == registered_task:
                 return registered_task
 
-
         # Check is a product is already registered
-        products_already_registered: List[str] = [str(p) for p in task.products if str(p) in set(map(str, self.registered_products))]
+        products_already_registered: List[str] = [str(p) for p in task.products if
+                                                  str(p) in set(map(str, self.registered_products))]
         if len(products_already_registered) > 0:
             raise ProductAlreadyRegisteredException(
                 f"The product\s {products_already_registered} is/are already registered. "
@@ -58,7 +57,7 @@ class Pipeline:
 
         # Register task
         self.tasks.append(task)
-        task._queue_id = len(self.tasks) # TODO Fix this!
+        task._queue_id = len(self.tasks)  # TODO Fix this!
         return task
 
     def _solve_order(self) -> None:
@@ -78,9 +77,9 @@ class Pipeline:
                                                       f"do/es not exist and can not be produced.")
 
             # Add the tasks that produce path_deps and remove such deps from the path_deps
-            task.task_dependencies : List[Task] = \
+            task.task_dependencies: List[Task] = \
                 ([product_to_task[d] for d in path_deps if d in product_to_task] + task_deps)
-            task.path_dependencies : List[Path] = \
+            task.path_dependencies: List[Path] = \
                 [d for d in path_deps if d not in product_to_task]
 
     def _submit_task(self, task: Task) -> bool:
@@ -96,7 +95,7 @@ class Pipeline:
         all_dependencies_are_available = True
         is_new_depfail_found = False
 
-        missing_deps : List[Path] = [p_dep for p_dep in task.path_dependencies if not p_dep.exists()]
+        missing_deps: List[Path] = [p_dep for p_dep in task.path_dependencies if not p_dep.exists()]
         for p_dep in missing_deps:
             assert isinstance(p_dep, Path)
             all_dependencies_are_available = False
@@ -122,7 +121,6 @@ class Pipeline:
                 task.set_to_depfailed()  # set to depfailed
                 is_new_depfail_found = True  # Remember that we propagated dependency failures
 
-
         # Execute the task if all dependencies are given
         if (all_dependencies_are_available or self.depioExecutor.handles_dependencies()
                 or not task.should_run(missing_products)):
@@ -133,7 +131,6 @@ class Pipeline:
                 self.depioExecutor.submit(task, task.task_dependencies)
 
             self.submitted_tasks.append(task)
-
 
         return is_new_depfail_found
 
@@ -164,7 +161,6 @@ class Pipeline:
                 print("Stopping execution bc of keyboard interrupt!")
                 self.exit_with_failed_tasks()
 
-
     def _get_text_for_task(self, task):
         status = task.status
 
@@ -176,7 +172,7 @@ class Pipeline:
             task.slurmid,
             formatted_slurmstatus,
             formatted_status,
-            [t.id for t in task.task_dependencies],
+            [t._queue_id for t in task.task_dependencies],
             [str(d) for d in task.dependencies if isinstance(d, Path)],
             [str(p) for p in task.products]
         ]
@@ -208,7 +204,8 @@ class Pipeline:
             for task in self.tasks:
                 if task.status[0] == TaskStatus.FAILED:
                     print(f"Details for Task ID: {task.id} - Name: {task.name}")
-                    print(tabulate([[task.stdout.getvalue()]], headers=["STDOUT"], tablefmt="grid"))
+                    print(tabulate([[task.get_stdout()]], headers=["STDOUT"], tablefmt="grid"))
+                    print(tabulate([[task.get_stderr()]], headers=["STDERR"], tablefmt="grid"))
 
         print("Canceling running jobs...")
         self.depioExecutor.cancel_all_jobs()

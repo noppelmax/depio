@@ -1,5 +1,3 @@
-
-
 # TASK EXCEPTIONS
 class ProductNotProducedException(Exception):
     pass
@@ -16,6 +14,7 @@ class DependencyNotMetException(Exception):
 class TaskRaisedExceptionException(Exception):
     pass
 
+
 class UnknownStatusException(Exception):
     pass
 
@@ -24,9 +23,10 @@ class UnknownStatusException(Exception):
 class TaskNotInQueueException(Exception):
     pass
 
+
 class ProductAlreadyRegisteredException(Exception):
     pass
 
+
 class DependencyNotAvailableException(Exception):
     pass
-

@@ -27,7 +27,6 @@ class AbstractTaskExecutor(ABC):
         ...
 
 
-
 @frozen
 class SequentialExecutor(AbstractTaskExecutor):
     """
@@ -87,10 +86,14 @@ DEFAULT_PARAMS = {
 
 class SubmitItExecutor(AbstractTaskExecutor):
 
-    def __init__(self, folder: Path=None, internal_executor=None, **kwargs):
-        self.internal_executor = internal_executor if internal_executor is not None else submitit.AutoExecutor(
-            folder=folder)
-        self.internal_executor.update_parameters(**DEFAULT_PARAMS)
+    def __init__(self, folder: Path = None, internal_executor=None, **kwargs):
+
+        # Overwrite with a default executor.
+        if internal_executor is None:
+            internal_executor = submitit.AutoExecutor(folder=folder)
+            internal_executor.update_parameters(**DEFAULT_PARAMS)
+
+        self.internal_executor = internal_executor
         self.slurmjobs = []
         print("depio-SubmitItExecutor initialized")
 
