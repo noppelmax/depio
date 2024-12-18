@@ -86,14 +86,17 @@ DEFAULT_PARAMS = {
 
 class SubmitItExecutor(AbstractTaskExecutor):
 
-    def __init__(self, folder: Path = None, internal_executor=None, **kwargs):
+    def __init__(self, folder: Path = None, internal_executor=None, parameters=None):
 
         # Overwrite with a default executor.
         if internal_executor is None:
             internal_executor = submitit.AutoExecutor(folder=folder)
-            internal_executor.update_parameters(**DEFAULT_PARAMS)
+            internal_executor.update_parameters(**parameters)
 
         self.internal_executor = internal_executor
+        self.default_parameters = parameters if parameters is not None else DEFAULT_PARAMS
+        self.internal_executor.update_parameters(**self.default_parameters)
+
         self.slurmjobs = []
         print("depio-SubmitItExecutor initialized")
 
@@ -106,8 +109,11 @@ class SubmitItExecutor(AbstractTaskExecutor):
         if len(afterok) > 0:
             slurm_additional_parameters["dependency"] = f"afterok:{':'.join(afterok)}"
 
-        self.internal_executor.update_parameters(**DEFAULT_PARAMS,
-                                                 slurm_additional_parameters=slurm_additional_parameters)
+        if task.slurm_parameters is not None:
+            params = task.slurm_parameters
+        else:
+            params = self.default_parameters
+        self.internal_executor.update_parameters(**params, slurm_additional_parameters=slurm_additional_parameters)
 
         slurmjob = self.internal_executor.submit(task.run)
         task.slurmjob = slurmjob

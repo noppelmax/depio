@@ -99,7 +99,8 @@ class Pipeline:
                 for task in self.tasks:
                     if task in self.handled_tasks: continue
                     if task.is_ready_for_execution() or self.depioExecutor.handles_dependencies():
-                        self.depioExecutor.submit(task, task.task_dependencies)
+                        if task.should_run():
+                            self.depioExecutor.submit(task, task.task_dependencies)
                         self.handled_tasks.append(task)
 
 
@@ -178,6 +179,11 @@ class Pipeline:
         exit(1)
 
     def exit_successful(self) -> None:
+        # Print the overview with the updated status once more.
+        for task in self.tasks:
+            task.is_ready_for_execution()
+        if not self.QUIET: self._print_tasks()
+
         print("All jobs done! Exit.")
         exit(0)
 

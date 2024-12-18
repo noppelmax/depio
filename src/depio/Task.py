@@ -107,7 +107,8 @@ def _get_not_updated_products(product_timestamps_after_running: typing.Dict,
 class Task:
     def __init__(self, name: str, func: Callable, func_args: List = None, func_kwargs: List = None,
                  produces: List[Path] = None, depends_on: List[Union[Path, Task]] = None,
-                 buildmode: BuildMode = BuildMode.IF_MISSING):
+                 buildmode: BuildMode = BuildMode.IF_MISSING,
+                 slurm_parameters: Dict = None):
 
         self.end_time = None
         self.start_time = None
@@ -122,6 +123,7 @@ class Task:
         self.func_args: List = func_args or []
         self.func_kwargs: Dict = func_kwargs or {}
         self.buildmode: BuildMode = buildmode
+        self.slurm_parameters: Dict = slurm_parameters or {}
 
         self.stdout: StringIO = StringIO()
         self.stderr: StringIO = StringIO()
@@ -149,8 +151,7 @@ class Task:
         self.dependent_tasks = []
 
     def is_ready_for_execution(self) -> bool:
-        missing_products: List[Path] = [p for p in self.products if not p.exists()]
-        if not self.should_run(missing_products):
+        if not self.should_run():
             self.set_to_skipped()
             return False
 
@@ -176,7 +177,9 @@ class Task:
     def __str__(self):
         return f"Task:{self.name}"
 
-    def should_run(self, missing_products: List[Path]) -> bool:
+    def should_run(self) -> bool:
+        missing_products: List[Path] = [p for p in self.products if not p.exists()]
+
         if self.buildmode == BuildMode.ALWAYS:
             return True
         elif self.buildmode == BuildMode.IF_MISSING:
@@ -184,7 +187,7 @@ class Task:
         elif self.buildmode == BuildMode.NEVER:
             return False
         else:
-            raise Exception(f"Unkown skipmode: {self.skipmode}")
+            raise Exception(f"Unkown buildmode: {self.buildmode}")
 
     def _check_path_dependencies(self):
         not_existing_path_dependencies: List[str] = \
