@@ -173,6 +173,7 @@ class Pipeline:
             formatted_slurmstatus,
             formatted_status,
             [t._queue_id for t in task.task_dependencies],
+            list(set([t._queue_id for t in task.task_dependencies])),
             [str(d) for d in task.dependencies if isinstance(d, Path)],
             [str(p) for p in task.products]
         ]
