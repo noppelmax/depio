@@ -84,6 +84,11 @@ class Pipeline:
             task.path_dependencies: List[Path] = \
                 [d for d in path_deps if d not in product_to_task]
 
+        for task in self.tasks:
+            for t_dep in task.dependencies:
+                t_dep.add_dependent_task(task)
+
+
     def _submit_task(self, task: Task) -> bool:
         """
         Submits the task to the extractor if all dependencies are available.

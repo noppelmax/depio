@@ -144,6 +144,11 @@ class Task:
         self.path_dependencies = None
         self.task_dependencies = None
 
+        self.dependent_task = []
+
+    def add_dependent_task(self, task):
+        self.dependent_task.append(task)
+
     def __str__(self):
         return f"Task:{self.name}"
 
