@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import pathlib
+from pathlib import Path
 import typing
+import time
 from io import StringIO
-from operator import truediv
 from os.path import getmtime
 from typing import List, Dict, Callable, get_origin, Annotated, get_args, Union
 import sys
@@ -106,11 +106,13 @@ def _get_not_updated_products(product_timestamps_after_running: typing.Dict,
 
 class Task:
     def __init__(self, name: str, func: Callable, func_args: List = None, func_kwargs: List = None,
-                 produces: List[pathlib.Path] = None, depends_on: List[Union[pathlib.Path, Task]] = None,
+                 produces: List[Path] = None, depends_on: List[Union[Path, Task]] = None,
                  buildmode: BuildMode = BuildMode.IF_MISSING):
 
-        produces: List[pathlib.Path] = produces or []
-        depends_on: List[Union[pathlib.Path, Task]] = depends_on or []
+        self.end_time = None
+        self.start_time = None
+        produces: List[Path] = produces or []
+        depends_on: List[Union[Path, Task]] = depends_on or []
 
         self._status: TaskStatus = TaskStatus.WAITING
         self.name: str = name
@@ -135,24 +137,46 @@ class Task:
         args_dict: Dict[str, typing.Any] = _get_args_dict(func, self.func_args, self.func_kwargs)
         self.cleaned_args: Dict[str, typing.Any] = {k: v for k, v in args_dict.items() if k not in ignored_for_eq_args}
 
-        self.products: List[pathlib.Path] = \
+        self.products: List[Path] = \
             ([args_dict[argname] for argname in products_args if argname in args_dict] + produces)
-        self.dependencies: List[Union[Task, pathlib.Path]] = \
+        self.dependencies: List[Union[Task, Path]] = \
             ([args_dict[argname] for argname in dependencies_args if argname in args_dict] + depends_on)
 
         # Gets filled by Pipeline
         self.path_dependencies = None
         self.task_dependencies = None
 
-        self.dependent_task = []
+        self.dependent_tasks = []
+
+    def is_ready_for_execution(self) -> bool:
+        missing_products: List[Path] = [p for p in self.products if not p.exists()]
+        if not self.should_run(missing_products):
+            self.set_to_skipped()
+            return False
+
+        if not self.all_path_dependencies_exist() and not self.is_in_terminal_state:
+            self.set_to_depfailed()
+            return False
+
+        if self.is_in_terminal_state:
+            return False
+
+        return self.all_path_dependencies_exist() and self.all_task_dependencies_terminated_successfully()
+
+
+    def all_path_dependencies_exist(self) -> bool:
+        return all(p_dep.exist() for p_dep in self.path_dependencies)
+
+    def all_task_dependencies_terminated_successfully(self) -> bool:
+        return all(t_dep.is_in_successful_terminal_state for t_dep in self.task_dependencies)
 
     def add_dependent_task(self, task):
-        self.dependent_task.append(task)
+        self.dependent_tasks.append(task)
 
     def __str__(self):
         return f"Task:{self.name}"
 
-    def should_run(self, missing_products: List[pathlib.Path]) -> bool:
+    def should_run(self, missing_products: List[Path]) -> bool:
         if self.buildmode == BuildMode.ALWAYS:
             return True
         elif self.buildmode == BuildMode.IF_MISSING:
@@ -180,8 +204,15 @@ class Task:
     def _get_timestamp_of_products(self) -> Dict[str, float]:
         return {str(product): getmtime(product) for product in self.products if product.exists()}
 
-    def run(self):
+    def get_duration(self) -> int:
+        if self.start_time is None:
+            return 0 # secs
+        if self.end_time is None:
+            return int(time.time() - self.start_time)
+        return int(self.end_time - self.start_time)
 
+    def run(self):
+        self.start_time = time.time()
         redirect(self.stdout)
 
         # Check if all path dependencies are met
@@ -196,7 +227,7 @@ class Task:
         try:
             self.func(*self.func_args, **self.func_kwargs)
         except Exception as e:
-            self._status = TaskStatus.FAILED
+            self.set_to_failed()
             raise TaskRaisedExceptionException(e)
         finally:
             stop_redirect()
@@ -213,6 +244,7 @@ class Task:
             raise ProductNotUpdatedException(f"Task {self.name}: Product/s {not_updated_products} not updated.")
 
         self._status = TaskStatus.FINISHED
+        self.end_time = time.time()
 
     def _set_status_by_slurmstate(self, slurmstate):
 
@@ -221,9 +253,12 @@ class Task:
         elif slurmstate in ['FAILED', 'BOOT_FAIL', 'DEADLINE', 'NODE_FAIL', 'OUT_OF_MEMORY',
                             'PREEMPTED', 'SPECIAL_EXIT', 'STOPPED', 'SUSPENDED', 'TIMEOUT']:
             _status = TaskStatus.FAILED
+            self.set_to_failed()
         elif slurmstate in ['READY', 'PENDING', 'REQUEUE_FED', 'REQUEUED']:
             _status = TaskStatus.PENDING
-        elif slurmstate == 'CANCELED':
+        elif slurmstate == 'CANCELLED':
+            _status = TaskStatus.CANCELED
+        elif 'CANCELLED' in slurmstate: # Slurm set 'CANCELLED by <number>' sometimes...
             _status = TaskStatus.CANCELED
         elif slurmstate in ['COMPLETED']:
             _status = TaskStatus.FINISHED
@@ -303,8 +338,22 @@ class Task:
     def is_in_failed_terminal_state(self) -> bool:
         return self._status in FAILED_TERMINAL_STATES
 
+    def set_dependent_task_to_depfailed(self):
+        for task in self.dependent_tasks:
+            task.set_to_depfailed()
+
+    def set_to_failed(self):
+        self._status = TaskStatus.FAILED
+        if self.slurmjob is not None:
+            self.slurmjob.cancel()
+        self.set_dependent_task_to_depfailed()
+
     def set_to_depfailed(self) -> None:
         self._status = TaskStatus.DEPFAILED
+        if self.slurmjob is not None:
+            self.slurmjob.cancel()
+        self.set_dependent_task_to_depfailed()
+
 
     def set_to_skipped(self) -> None:
         self._status = TaskStatus.SKIPPED

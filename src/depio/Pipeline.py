@@ -25,7 +25,7 @@ class Pipeline:
         self.REFRESHRATE: float = refreshrate
 
         self.name: str = name
-        self.submitted_tasks: List[Task] = None
+        self.handled_tasks: List[Task] = None
         self.tasks: List[Task] = []
         self.depioExecutor: AbstractTaskExecutor = depioExecutor
         self.registered_products: Set[Path] = set()
@@ -77,87 +77,35 @@ class Pipeline:
                                                       f"do/es not exist and can not be produced.")
 
             # Add the tasks that produce path_deps and remove such deps from the path_deps
-            task.task_dependencies: List[Task] = \
-                ([product_to_task[d] for d in path_deps if d in product_to_task] + task_deps)
-            task.task_dependencies = list(set(task.task_dependencies))
+            task.task_dependencies = []
+            for t in ([product_to_task[d] for d in path_deps if d in product_to_task] + task_deps):
+                if not t in task.task_dependencies: task.task_dependencies.append(t)
 
-            task.path_dependencies: List[Path] = \
+            task.path_dependencies = \
                 [d for d in path_deps if d not in product_to_task]
 
+        # Adding the backlinks
         for task in self.tasks:
-            for t_dep in task.dependencies:
+            for t_dep in task.task_dependencies:
                 t_dep.add_dependent_task(task)
-
-
-    def _submit_task(self, task: Task) -> bool:
-        """
-        Submits the task to the extractor if all dependencies are available.
-        Otherwise, the function is called recursively for each dependency.
-
-        :param task:
-        :return:
-        """
-
-        all_dependencies_are_available = True
-        is_new_depfail_found = False
-
-        missing_deps: List[Path] = [p_dep for p_dep in task.path_dependencies if not p_dep.exists()]
-        for p_dep in missing_deps:
-            assert isinstance(p_dep, Path)
-            all_dependencies_are_available = False
-
-            if not task.is_in_failed_terminal_state:
-                # If the task is not already in failed state:
-                task.set_to_depfailed()  # set to depfailed
-                is_new_depfail_found = True  # Remember that we propagated dependency failures
-
-        missing_products: List[Path] = [p for p in task.products if not p.exists()]
-        if not task.should_run(missing_products):
-            task.set_to_skipped()
-
-        # Execute and check all dependencies first
-        for t_dep in task.task_dependencies:
-            assert isinstance(t_dep, Task)
-            self._submit_task(t_dep)  # Recursive call for dependency
-            if not t_dep.is_in_successful_terminal_state:
-                all_dependencies_are_available = False
-
-            if t_dep.is_in_failed_terminal_state and not task.is_in_terminal_state:
-                # If the task is not already in failed state:
-                task.set_to_depfailed()  # set to depfailed
-                is_new_depfail_found = True  # Remember that we propagated dependency failures
-
-        # Execute the task if all dependencies are given
-        if (all_dependencies_are_available or self.depioExecutor.handles_dependencies()
-                or not task.should_run(missing_products)):
-
-            if not task.should_run(missing_products):
-                task.set_to_skipped()
-                if not task in self.submitted_tasks:
-                    self.submitted_tasks.append(task)
-            else:
-                if not task in self.submitted_tasks:
-                    self.depioExecutor.submit(task, task.task_dependencies)
-                    self.submitted_tasks.append(task)
-
-        return is_new_depfail_found
 
     def run(self) -> None:
         enable_proxy()
-
         self._solve_order()
-        self.submitted_tasks: List[Task] = []
-
+        self.handled_tasks = []
         while True:
             try:
-                # Iterate over all tasks in the queue until now new depfail is found
-                while True:
-                    if all(not self._submit_task(task) for task in self.tasks): break
+                # Submit new runnable jobs.
+                for task in self.tasks:
+                    if task in self.handled_tasks: continue
+                    if task.is_ready_for_execution() or self.depioExecutor.handles_dependencies():
+                        self.depioExecutor.submit(task, task.task_dependencies)
+                        self.handled_tasks.append(task)
+
 
                 # Check the status of all tasks
-                all_tasks_in_terminal_state = all(task.is_in_terminal_state for task in self.tasks)
                 if not self.QUIET: self._print_tasks()
-                if all_tasks_in_terminal_state:
+                if all(task.is_in_terminal_state for task in self.tasks):
                     if any(task.is_in_failed_terminal_state for task in self.tasks):
                         self.exit_with_failed_tasks()
                     else:
@@ -166,7 +114,7 @@ class Pipeline:
                 time.sleep(self.REFRESHRATE)
 
             except KeyboardInterrupt:
-                print("Stopping execution bc of keyboard interrupt!")
+                print("Stopping execution because of a keyboard interrupt!")
                 self.exit_with_failed_tasks()
 
     def _get_text_for_task(self, task):
@@ -200,6 +148,13 @@ class Pipeline:
 
     def exit_with_failed_tasks(self) -> None:
         print()
+
+        # Print the overview with the updated status once more.
+        for task in self.tasks:
+            task.is_ready_for_execution()
+        if not self.QUIET: self._print_tasks()
+
+
         failed_tasks = [
             [task.id, task.name, task.slurmid, task.status[1]]
             for task in self.tasks if task.status[0] == TaskStatus.FAILED
