@@ -79,6 +79,8 @@ class Pipeline:
             # Add the tasks that produce path_deps and remove such deps from the path_deps
             task.task_dependencies: List[Task] = \
                 ([product_to_task[d] for d in path_deps if d in product_to_task] + task_deps)
+            task.task_dependencies = list(set(task.task_dependencies))
+
             task.path_dependencies: List[Path] = \
                 [d for d in path_deps if d not in product_to_task]
 
@@ -90,7 +92,6 @@ class Pipeline:
         :param task:
         :return:
         """
-        if task in self.submitted_tasks: return
 
         all_dependencies_are_available = True
         is_new_depfail_found = False
@@ -127,10 +128,12 @@ class Pipeline:
 
             if not task.should_run(missing_products):
                 task.set_to_skipped()
+                if not task in self.submitted_tasks:
+                    self.submitted_tasks.append(task)
             else:
-                self.depioExecutor.submit(task, task.task_dependencies)
-
-            self.submitted_tasks.append(task)
+                if not task in self.submitted_tasks:
+                    self.depioExecutor.submit(task, task.task_dependencies)
+                    self.submitted_tasks.append(task)
 
         return is_new_depfail_found
 
@@ -172,8 +175,8 @@ class Pipeline:
             task.slurmid,
             formatted_slurmstatus,
             formatted_status,
+            task.get_duration(),
             [t._queue_id for t in task.task_dependencies],
-            list(set([t._queue_id for t in task.task_dependencies])),
             [str(d) for d in task.dependencies if isinstance(d, Path)],
             [str(p) for p in task.products]
         ]
@@ -183,7 +186,7 @@ class Pipeline:
 
     def _print_tasks(self):
         self._clear_screen()
-        headers = ["ID", "Name", "Slurm ID", "Slurm Status", "Status", "Task Deps.", "Path Deps.", "Products"]
+        headers = ["ID", "Name", "Slurm ID", "Slurm Status", "Status", "Duration [sec]", "Task Deps.", "Path Deps.", "Products"]
         tasks_data = [self._get_text_for_task(task) for task in self.tasks]
         table_str = tabulate(tasks_data, headers=headers, tablefmt="plain")
         print()
