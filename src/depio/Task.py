@@ -172,7 +172,7 @@ class Task:
 
 
     def all_path_dependencies_exist(self) -> bool:
-        return all(p_dep.exist() for p_dep in self.path_dependencies)
+        return all(p_dep.exists() for p_dep in self.path_dependencies)
 
     def all_task_dependencies_terminated_successfully(self) -> bool:
         return all(t_dep.is_in_successful_terminal_state for t_dep in self.task_dependencies)
