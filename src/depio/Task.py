@@ -108,7 +108,8 @@ class Task:
     def __init__(self, name: str, func: Callable, func_args: List = None, func_kwargs: List = None,
                  produces: List[Path] = None, depends_on: List[Union[Path, Task]] = None,
                  buildmode: BuildMode = BuildMode.IF_MISSING,
-                 slurm_parameters: Dict = None):
+                 slurm_parameters: Dict = None,
+                 arg_resolver: Callable = None):
 
         self.end_time = None
         self.start_time = None
@@ -135,6 +136,11 @@ class Task:
         products_args: List[str] = _parse_annotation_for_metaclass(func, Product)
         dependencies_args: List[str] = _parse_annotation_for_metaclass(func, Dependency)
         ignored_for_eq_args: List[str] = _parse_annotation_for_metaclass(func, IgnoredForEq)
+
+        # Allow the task to specify an argument resolver. This can be used to load default values dynamically.
+        # And in particular, before the DAG is constructed.
+        if arg_resolver is not None:
+            self.func_args, self.func_kwargs = arg_resolver(self.func, self.func_args, self.func_kwargs)
 
         args_dict: Dict[str, typing.Any] = _get_args_dict(func, self.func_args, self.func_kwargs)
         self.cleaned_args: Dict[str, typing.Any] = {k: v for k, v in args_dict.items() if k not in ignored_for_eq_args}
