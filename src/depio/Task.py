@@ -384,8 +384,7 @@ class Task:
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
-            return (self.func == other.func
-                    and self.cleaned_args == other.cleaned_args)
+            return self.func == other.func and self.cleaned_args == other.cleaned_args
         else:
             return False
 
