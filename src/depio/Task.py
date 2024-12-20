@@ -146,9 +146,9 @@ class Task:
         self.cleaned_args: Dict[str, typing.Any] = {k: v for k, v in args_dict.items() if k not in ignored_for_eq_args}
 
         self.products: List[Path] = \
-            ([args_dict[argname] for argname in products_args if argname in args_dict] + produces)
+            ([args_dict[argname] for argname in products_args if argname in args_dict and args_dict[argname] is not None] + produces)
         self.dependencies: List[Union[Task, Path]] = \
-            ([args_dict[argname] for argname in dependencies_args if argname in args_dict] + depends_on)
+            ([args_dict[argname] for argname in dependencies_args if argname in args_dict and args_dict[argname] is not None] + depends_on)
 
         # Gets filled by Pipeline
         self.path_dependencies = None
