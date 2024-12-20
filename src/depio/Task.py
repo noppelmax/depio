@@ -386,13 +386,15 @@ class Task:
 
     def get_stderr(self):
         if self.slurmjob is None:
-            self.stderr.getvalue()
-        return self.slurmjob.stderr()
+            return self.stderr.getvalue()
+        else:
+            return self.slurmjob.stderr()
 
     def get_stdout(self):
         if self.slurmjob is None:
-            self.stdout.getvalue()
-        return self.slurmjob.stdout()
+            return self.stdout.getvalue()
+        else:
+            return self.slurmjob.stdout()
 
 
 __all__ = [Task, Product, Dependency, _get_not_updated_products]
