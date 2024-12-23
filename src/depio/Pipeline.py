@@ -16,6 +16,7 @@ from .exceptions import ProductAlreadyRegisteredException, TaskNotInQueueExcepti
 class Pipeline:
     def __init__(self, depioExecutor: AbstractTaskExecutor, name: str = "NONAME",
                  clear_screen: bool = True,
+                 hide_successful_terminated_tasks: bool = False,
                  quiet: bool = False,
                  refreshrate: float = 1.0):
 
@@ -23,6 +24,7 @@ class Pipeline:
         self.CLEAR_SCREEN: bool = clear_screen
         self.QUIET: bool = quiet
         self.REFRESHRATE: float = refreshrate
+        self.HIDE_SUCCESSFUL_TERMINATED_TASKS: bool = hide_successful_terminated_tasks
 
         self.name: str = name
         self.handled_tasks: List[Task] = None
@@ -142,6 +144,12 @@ class Pipeline:
         self._clear_screen()
         headers = ["ID", "Name", "Slurm ID", "Slurm Status", "Status", "Duration [sec]", "Task Deps.", "Path Deps.", "Products"]
         tasks_data = [self._get_text_for_task(task) for task in self.tasks]
+
+        if self.HIDE_SUCCESSFUL_TERMINATED_TASKS:
+            tmp_tasks = [t for t in self.tasks if not t.is_in_successful_terminal_state]
+        else:
+            tmp_tasks = self.tasks
+        tasks_data = [self._get_text_for_task(task) for task in tmp_tasks]
         table_str = tabulate(tasks_data, headers=headers, tablefmt="plain")
         print()
         print("Tasks:")
