@@ -1,7 +1,5 @@
 from typing import Annotated
 
-import pytest
-
 from depio.Task import IgnoredForEq
 from depio.Task import Task
 

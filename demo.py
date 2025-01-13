@@ -3,13 +3,11 @@ import pathlib
 import time
 
 from depio.BuildMode import BuildMode
-from depio.Executors import DemoTaskExecutor
 from depio.Pipeline import Pipeline
 from depio.decorators import task
 from depio.Task import Product, Dependency
 
 from src.depio.Executors import ParallelExecutor
-from src.depio import stdio_helpers
 
 depioExecutor = ParallelExecutor()
 defaultpipeline = Pipeline(depioExecutor=depioExecutor, clear_screen=False)

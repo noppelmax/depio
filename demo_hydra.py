@@ -1,13 +1,11 @@
-import os
 from typing import Annotated
 import pathlib
-import submitit
 import time
 
 from omegaconf import DictConfig, OmegaConf
 import hydra
 
-from depio.Executors import SubmitItExecutor, ParallelExecutor
+from depio.Executors import ParallelExecutor
 from depio.Pipeline import Pipeline
 from depio.decorators import task
 from depio.Task import Product, Dependency, IgnoredForEq

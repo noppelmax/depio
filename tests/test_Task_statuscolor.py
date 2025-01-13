@@ -1,6 +1,6 @@
 # Python
 import pytest
-from depio.Task import Task, TaskStatus, _status_colors, UnknownStatusException
+from depio.Task import Task, _status_colors, UnknownStatusException
 
 
 def test_statuscolor():

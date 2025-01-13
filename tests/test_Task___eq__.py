@@ -1,4 +1,3 @@
-import pytest
 from depio.Task import Task
 
 

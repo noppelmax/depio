@@ -1,8 +1,11 @@
 import pathlib
+from distutils.command.build_scripts import first_line_re
 from typing import Set, Dict, List
 from pathlib import Path
 import time
 import sys
+
+
 from termcolor import colored
 from tabulate import tabulate
 
@@ -40,13 +43,16 @@ class Pipeline:
             if task == registered_task:
                 return registered_task
 
+
         # Check is a product is already registered
         products_already_registered: List[str] = [str(p) for p in task.products if
                                                   str(p) in set(map(str, self.registered_products))]
         if len(products_already_registered) > 0:
+            print(task.cleaned_args)
             raise ProductAlreadyRegisteredException(
                 f"The product\s {products_already_registered} is/are already registered. "
                 f"Each output can only be registered from one task.")
+
 
         # Check if the task dependencies are registered already
         missing_tasks: List[Task] = [t for t in task.dependencies if isinstance(t, Task) and t not in self.tasks]
@@ -126,15 +132,16 @@ class Pipeline:
         formatted_status = colored(f"{status[1].upper():<{len('DEP. FAILED')}s}", status[2])
         formatted_slurmstatus = colored(f"{status[3]:<{len('OUT_OF_MEMORY')}s}", status[2])
         return [
+            task.is_in_successful_terminal_state,
             task.id,
             task.name,
             task.slurmid,
             formatted_slurmstatus,
             formatted_status,
-            task.get_duration(),
+            #task.get_duration(),
             [t._queue_id for t in task.task_dependencies],
-            [str(d) for d in task.dependencies if isinstance(d, Path)],
-            [str(p) for p in task.products]
+            #[str(d) for d in task.dependencies if isinstance(d, Path)],
+            #[str(p) for p in task.products]
         ]
 
     def _clear_screen(self):
@@ -142,18 +149,31 @@ class Pipeline:
 
     def _print_tasks(self):
         self._clear_screen()
-        headers = ["ID", "Name", "Slurm ID", "Slurm Status", "Status", "Duration [sec]", "Task Deps.", "Path Deps.", "Products"]
+        headers = ["ID", "Name", "Slurm ID", "Slurm Status", "Status", "Task Deps."]
+
+
         tasks_data = [self._get_text_for_task(task) for task in self.tasks]
 
+        # Generate and print the histogram for tasks_data[5]
+        histogram = {}
+        for task_data in tasks_data:
+            s = task_data[5]
+            histogram[s] = histogram.get(s, 0) + 1
+
         if self.HIDE_SUCCESSFUL_TERMINATED_TASKS:
-            tmp_tasks = [t for t in self.tasks if not t.is_in_successful_terminal_state]
+            tasks_data = [td[1:] for td in tasks_data if not td[0] == True]
         else:
-            tmp_tasks = self.tasks
-        tasks_data = [self._get_text_for_task(task) for task in tmp_tasks]
+            tasks_data = [td[1:] for td in tasks_data]
+
         table_str = tabulate(tasks_data, headers=headers, tablefmt="plain")
         print()
         print("Tasks:")
         print(table_str)
+
+        print("\nSummary:")
+        for string, count in histogram.items():
+            print(f"{string}: {count:4d} tasks")
+
 
     def exit_with_failed_tasks(self) -> None:
         print()
@@ -177,8 +197,11 @@ class Pipeline:
             for task in self.tasks:
                 if task.status[0] == TaskStatus.FAILED:
                     print(f"Details for Task ID: {task.id} - Name: {task.name}")
-                    print(tabulate([[task.get_stdout()]], headers=["STDOUT"], tablefmt="grid"))
-                    print(tabulate([[task.get_stderr()]], headers=["STDERR"], tablefmt="grid"))
+                    print(f"STDOUT")
+                    print(task.get_stdout())
+                    print(f"")
+                    print(f"STDERR")
+                    print(task.get_stderr())
 
         print("Canceling running jobs...")
         self.depioExecutor.cancel_all_jobs()

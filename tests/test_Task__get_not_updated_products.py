@@ -1,8 +1,5 @@
 # File: test_Task__get_not_updated_products.py
 
-import pytest
-from depio.Task import Task
-
 from depio.Task import _get_not_updated_products
 
 

@@ -1,7 +1,6 @@
 import os
 from typing import Annotated
 import pathlib
-import submitit
 import time
 
 from depio.Executors import SubmitItExecutor
