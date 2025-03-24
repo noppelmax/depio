@@ -56,7 +56,7 @@ class Pipeline:
                 t = [t for t in self.tasks if str(p) in set(map(str, t.products))][0]
                 print(f"Product {p} is already registered by task {t.name}. Now again registered by task {task.name}.")
             raise ProductAlreadyRegisteredException(
-                f"The product\s {products_already_registered} is/are already registered. "
+                f"The product/s {products_already_registered} is/are already registered. "
                 f"Each output can only be registered from one task.")
 
 
