@@ -1,5 +1,6 @@
 import pathlib
 from distutils.command.build_scripts import first_line_re
+from logging import setLoggerClass
 from typing import Set, Dict, List
 from pathlib import Path
 import time
@@ -20,6 +21,7 @@ class Pipeline:
     def __init__(self, depioExecutor: AbstractTaskExecutor, name: str = "NONAME",
                  clear_screen: bool = True,
                  hide_successful_terminated_tasks: bool = False,
+                 submit_only_if_runnable: bool = False,
                  quiet: bool = False,
                  refreshrate: float = 1.0):
 
@@ -28,6 +30,7 @@ class Pipeline:
         self.QUIET: bool = quiet
         self.REFRESHRATE: float = refreshrate
         self.HIDE_SUCCESSFUL_TERMINATED_TASKS: bool = hide_successful_terminated_tasks
+        self.SUBMIT_ONLY_IF_RUNNABLE :bool = submit_only_if_runnable
 
         self.name: str = name
         self.handled_tasks: List[Task] = None
@@ -49,6 +52,9 @@ class Pipeline:
                                                   str(p) in set(map(str, self.registered_products))]
         if len(products_already_registered) > 0:
             print(task.cleaned_args)
+            for p in products_already_registered:
+                t = [t for t in self.tasks if str(p) in set(map(str, t.products))][0]
+                print(f"Product {p} is already registered by task {t.name}. Now again registered by task {task.name}.")
             raise ProductAlreadyRegisteredException(
                 f"The product\s {products_already_registered} is/are already registered. "
                 f"Each output can only be registered from one task.")
@@ -108,8 +114,12 @@ class Pipeline:
                     if task in self.handled_tasks: continue
                     if task.is_ready_for_execution() or self.depioExecutor.handles_dependencies():
                         if task.should_run():
-                            self.depioExecutor.submit(task, task.task_dependencies)
-                        self.handled_tasks.append(task)
+                            if not self.SUBMIT_ONLY_IF_RUNNABLE:
+                                self.depioExecutor.submit(task, task.task_dependencies)
+                                self.handled_tasks.append(task)
+                            elif task.is_ready_for_execution():
+                                self.depioExecutor.submit(task, task.task_dependencies)
+                                self.handled_tasks.append(task)
 
 
                 # Check the status of all tasks
@@ -150,7 +160,6 @@ class Pipeline:
     def _print_tasks(self):
         self._clear_screen()
         headers = ["ID", "Name", "Slurm ID", "Slurm Status", "Status", "Task Deps."]
-
 
         tasks_data = [self._get_text_for_task(task) for task in self.tasks]
 

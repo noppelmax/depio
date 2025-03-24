@@ -279,9 +279,16 @@ def funcdec(output: Annotated[pathlib.Path, Product]):
 ```
 
 There are three values to chose from
-- `BuildMode.NEVER`: Run this task never
-- `BuildMode.IF_MISSING`: Run this tasks if one of the output files is missing
-- `BuildMode.ALWAYS`: Always run this task
+- `BuildMode.NEVER`: Never run the task.
+- `BuildMode.IF_MISSING`: Run this tasks if one of the output files is missing. This option does not check if a new input is given or if a previous task (with a dependency) is run.  
+- `BuildMode.ALWAYS`: Always run this task.
+- `BuildMode.IF_NEW`: Run if the inputs are newer as the output file, or if any of the previous tasks (producing a dependency) is run.
+
+In addition, there are flags, you can hand over to the pipeline:
+- `clear_screen` : bool : If set, at every refresh it tries to clear the screen such that the table is always on the top of the screen. Does not work in all terminals right now.
+- `hide_successful_terminated_tasks` : bool : If set, successfully terminated (skipped,finished) tasks do not show up in the list.
+- `submit_only_if_runnable` : bool : If set, only ready for execution jobs get submitted. 
+- `refreshrate` : float : The refreshrate of the list in seconds. It is just lower bound and added as a sleep before the next set of states is queried from the executor.
 
 ## How to develop
 Create an editable egg and install it.

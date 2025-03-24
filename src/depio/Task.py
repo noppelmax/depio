@@ -49,7 +49,9 @@ _status_texts = {
     TaskStatus.HOLD: 'hold',
     TaskStatus.FAILED: 'failed',
     TaskStatus.CANCELED: 'cancelled',
-    TaskStatus.UNKNOWN: 'unknown'
+    TaskStatus.UNKNOWN: 'unknown',
+    TaskStatus.WAITING: 'waiting',
+    TaskStatus.DEPFAILED: 'dep. failed'
 }
 
 
@@ -109,10 +111,12 @@ class Task:
                  produces: List[Path] = None, depends_on: List[Union[Path, Task]] = None,
                  buildmode: BuildMode = BuildMode.IF_MISSING,
                  slurm_parameters: Dict = None,
-                 arg_resolver: Callable = None):
+                 arg_resolver: Callable = None,
+                 description: str = None):
 
         self.end_time = None
         self.start_time = None
+        self.description = description or ""
         produces: List[Path] = produces or []
         depends_on: List[Union[Path, Task]] = depends_on or []
 
@@ -190,6 +194,8 @@ class Task:
             return True
         elif self.buildmode == BuildMode.IF_MISSING:
             return len(missing_products) > 0
+        elif self.buildmode == BuildMode.IF_NEW:
+            return any(t.should_run() for t in self.task_dependencies) or len(missing_products) > 0
         elif self.buildmode == BuildMode.NEVER:
             return False
         else:
@@ -255,6 +261,9 @@ class Task:
         self._status = TaskStatus.FINISHED
         self.end_time = time.time()
 
+    def barerun(self):
+        self.func(*self.func_args, **self.func_kwargs)
+
     def _set_status_by_slurmstate(self, slurmstate):
 
         if slurmstate in ['RUNNING', 'CONFIGURING', 'COMPLETING', 'STAGE_OUT']:
@@ -307,6 +316,13 @@ class Task:
             raise UnknownStatusException(f"Status {s} is unknown.")
 
     def statustext(self, s: TaskStatus = None) -> str:
+        if s is None: s = self._status
+        if s in _status_texts:
+            return _status_texts[s]
+
+        raise UnknownStatusException(f"Status {s} is unknown.")
+
+    def statustext_long(self, s: TaskStatus = None) -> str:
         if s is None: s = self._status
         if s in _status_texts:
             return _status_texts[s]
@@ -384,7 +400,41 @@ class Task:
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
-            return self.func == other.func and self.cleaned_args == other.cleaned_args
+            if self.func != other.func:
+                return False
+
+            for k,v1 in self.cleaned_args.items():
+                if k not in other.cleaned_args:
+                    return False
+                if v1 is None and other.cleaned_args[k] is not None:
+                    return False
+                if v1 is not None and other.cleaned_args[k] is None:
+                    return False
+                if v1 is None and other.cleaned_args[k] is None:
+                    continue # None and None should be considered equal!
+                if v1 != other.cleaned_args[k]:
+                    return False
+                # => v1 = other.cleaned_args[k] or both are None
+
+            # And the other way around....
+            for k,v1 in other.cleaned_args.items():
+                if k not in self.cleaned_args:
+                    return False
+                if v1 is None and self.cleaned_args[k] is not None:
+                    return False
+                if v1 is not None and self.cleaned_args[k] is None:
+                    return False
+                if v1 is None and self.cleaned_args[k] is None:
+                    continue # None and None should be considered equal!
+                if v1 != self.cleaned_args[k]:
+                    return False
+                # => v1 = self.cleaned_args[k] or both are None
+
+
+
+            return True
+
+
         else:
             return False
 
