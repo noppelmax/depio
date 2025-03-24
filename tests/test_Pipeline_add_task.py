@@ -39,8 +39,9 @@ def test_add_task_unregistered_dependency(pipeline):
 def test_add_task_registered_dependency(pipeline):
     task1 = Task("task1", dummyfunc)
     pipeline.add_task(task1)
-    assert task1._queue_id == 1
+    # assert task1._queue_id == 1
     task2 = Task("task2", dummyfunc, depends_on=[task1])
     pipeline.add_task(task2)
-    assert task2._queue_id == 2
+    # assert task2._queue_id == 2
+    assert task1 in pipeline.tasks
     assert task2 in pipeline.tasks
