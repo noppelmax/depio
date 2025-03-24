@@ -12,6 +12,7 @@ class TaskMock(Task):
         self.dependencies = dependencies
         self.products = products
         self.task_dependencies = []
+        self.dependent_tasks = []
 
 class PathMock(Path):
     if type(Path())._flavour:
