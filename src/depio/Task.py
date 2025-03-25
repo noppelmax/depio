@@ -430,8 +430,6 @@ class Task:
                     return False
                 # => v1 = self.cleaned_args[k] or both are None
 
-
-
             return True
 
 

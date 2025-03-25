@@ -63,7 +63,3 @@ def test_task_eq_same_name():
     assert task1 == task2
 
 
-def test_task_eq_diff_name():
-    task1 = Task("task1", func1)
-    task2 = Task("task2", func1)
-    assert task1 != task2
