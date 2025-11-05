@@ -39,6 +39,10 @@ class Pipeline:
         self.registered_products: Set[Path] = set()
         if not self.QUIET: print("Pipeline initialized")
 
+    def add_tasks(self, tasks: List[Task]) -> None:
+        for task in tasks:
+            self.add_task(task)
+
     def add_task(self, task: Task) -> None:
 
         # Check if the exact task is already registered
