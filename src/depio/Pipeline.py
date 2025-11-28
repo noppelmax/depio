@@ -118,16 +118,19 @@ class Pipeline:
                     if task in self.handled_tasks: continue
                     if task.is_ready_for_execution() or self.depioExecutor.handles_dependencies():
                         if task.should_run():
-                            if len([t for t  in self.handled_tasks if t.status in [TaskStatus.PENDING,TaskStatus.UNKNOWN]]) > 20:
-                                pass # Only have n jobs in pending. # TODO Make the 20 a variable n!
-                            elif len([t for t  in self.handled_tasks if not t.is_in_terminal_state]) > 45:
-                                pass # Only have at most 45 jobs in non-terminal states. (Do not overload the BWUniCluster)
-                            elif not self.SUBMIT_ONLY_IF_RUNNABLE:
+                            if not self.SUBMIT_ONLY_IF_RUNNABLE:
                                 self.depioExecutor.submit(task, task.task_dependencies)
                                 self.handled_tasks.append(task)
                             elif task.is_ready_for_execution():
-                                self.depioExecutor.submit(task, task.task_dependencies)
-                                self.handled_tasks.append(task)
+                                if len([t for t  in self.handled_tasks if t.status[0] in [TaskStatus.PENDING,TaskStatus.UNKNOWN]]) > 20:
+                                    pass # Only have n jobs in pending. # TODO Make the 20 a variable n!
+                                elif len([t for t  in self.handled_tasks if not t.is_in_terminal_state]) > 45:
+                                    pass # Only have at most 45 jobs in non-terminal states. (Do not overload the BWUniCluster)
+                                else:
+                                    self.depioExecutor.submit(task, task.task_dependencies)
+                                    self.handled_tasks.append(task)
+                            else:
+                                pass
 
 
                 # Check the status of all tasks
