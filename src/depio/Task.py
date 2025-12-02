@@ -285,7 +285,7 @@ class Task:
         elif slurmstate in ['UNKNOWN']:
             _status = TaskStatus.UNKNOWN
         else:
-            print(f"Unknown slurmjob status! -> {slurmstate} ")
+            #print(f"Unknown slurmjob status! -> {slurmstate} ")
             _status = TaskStatus.UNKNOWN
 
         self._status = _status
