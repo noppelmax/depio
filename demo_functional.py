@@ -1,17 +1,16 @@
 import time
 
-from depio.Executors import DemoTaskExecutor, ParallelExecutor
+from depio.Executors import SequentialExecutor, ParallelExecutor
 from depio.Pipeline import Pipeline
 from depio.Task import Task
 
 
-depioExecutor = DemoTaskExecutor()
-depioExecutor = ParallelExecutor()
+depioExecutor = SequentialExecutor()
 
 defaultpipeline = Pipeline(depioExecutor=depioExecutor, clear_screen=False)
 
 def func(x):
-    time.sleep(5)
+    time.sleep(50)
     return x + 1
 
 

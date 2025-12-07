@@ -1,10 +1,21 @@
 import pathlib
-from distutils.command.build_scripts import first_line_re
 from logging import setLoggerClass
 from typing import Set, Dict, List
 from pathlib import Path
 import time
 import sys
+
+from rich.table import Table
+from rich.panel import Panel
+from rich.console import Group
+from rich.live import Live
+from rich.text import Text
+
+import termios
+import tty
+
+import threading
+import queue
 
 
 from termcolor import colored
@@ -38,6 +49,8 @@ class Pipeline:
         self.depioExecutor: AbstractTaskExecutor = depioExecutor
         self.registered_products: Set[Path] = set()
         if not self.QUIET: print("Pipeline initialized")
+
+        self.paused = False
 
     def add_tasks(self, tasks: List[Task]) -> None:
         for task in tasks:
@@ -125,99 +138,139 @@ class Pipeline:
         enable_proxy()
         self._solve_order()
         self.handled_tasks = []
-        while True:
-            try:
-                # Submit new runnable jobs.
-                for task in self.tasks:
-                    if task in self.handled_tasks: continue
-                    if task.is_ready_for_execution() or self.depioExecutor.handles_dependencies():
-                        if task.should_run():
-                            if not self.SUBMIT_ONLY_IF_RUNNABLE:
-                                self.depioExecutor.submit(task, task.task_dependencies)
-                                self.handled_tasks.append(task)
-                            elif task.is_ready_for_execution():
-                                # The task is ready to run
 
-                                # Check queued/pending limits
-                                if self.depioExecutor.has_jobs_queued_limit:
-                                    # Check if we reached the limit of queued jobs
-                                    n_pending_tasks = len(self._get_non_terminal_tasks())
-                                    if n_pending_tasks >= self.depioExecutor.max_jobs_queued:
-                                        continue
-                                elif self.depioExecutor.has_jobs_pending_limit:
-                                    # Check if we reached the limit of pending/running jobs
-                                    n_non_terminal_tasks = len(self._get_pending_tasks())
-                                    if n_non_terminal_tasks >= self.depioExecutor.max_jobs_pending:
-                                        continue
+        #key_queue = self._start_keyboard_listener()
 
-                                # submit the task
-                                self.depioExecutor.submit(task, task.task_dependencies)
-                                self.handled_tasks.append(task)
-                            else:
-                                pass
+        with Live(refresh_per_second=5, console=None) as live:
+            while True:
+                try:
+                    if self.paused:
+                        time.sleep(self.REFRESHRATE)
+                        continue
 
+                    # Submit new runnable tasks
+                    for task in self.tasks:
+                        if task in self.handled_tasks:
+                            continue
 
-                # Check the status of all tasks
-                if not self.QUIET: self._print_tasks()
-                if all(task.is_in_terminal_state for task in self.tasks):
-                    if any(task.is_in_failed_terminal_state for task in self.tasks):
-                        self.exit_with_failed_tasks()
-                    else:
-                        self.exit_successful()
+                        if task.is_ready_for_execution() or self.depioExecutor.handles_dependencies():
+                            if task.should_run():
 
-                time.sleep(self.REFRESHRATE)
+                                if not self.SUBMIT_ONLY_IF_RUNNABLE:
+                                    self.depioExecutor.submit(task, task.task_dependencies)
+                                    self.handled_tasks.append(task)
+                                elif task.is_ready_for_execution():
+                                    if self.depioExecutor.has_jobs_queued_limit:
+                                        if len(self._get_non_terminal_tasks()) >= self.depioExecutor.max_jobs_queued:
+                                            continue
+                                    elif self.depioExecutor.has_jobs_pending_limit:
+                                        if len(self._get_pending_tasks()) >= self.depioExecutor.max_jobs_pending:
+                                            continue
 
-            except KeyboardInterrupt:
-                print("Stopping execution because of a keyboard interrupt!")
-                self.exit_with_failed_tasks()
+                                    self.depioExecutor.submit(task, task.task_dependencies)
+                                    self.handled_tasks.append(task)
+
+                    # Update the rich UI
+                    if not self.QUIET:
+                        live.update(self._print_tasks())
+
+                    # Exit conditions
+                    if all(task.is_in_terminal_state for task in self.tasks):
+                        if any(task.is_in_failed_terminal_state for task in self.tasks):
+                            self.exit_with_failed_tasks()
+                        else:
+                            self.exit_successful()
+
+                    time.sleep(self.REFRESHRATE)
+
+                except KeyboardInterrupt:
+                    print("Stopping execution because of keyboard interrupt!")
+                    self.exit_with_failed_tasks()
+
 
     def _get_text_for_task(self, task):
         status = task.status
 
-        formatted_status = colored(f"{status[1].upper():<{len('DEP. FAILED')}s}", status[2])
-        formatted_slurmstatus = colored(f"{status[3]:<{len('OUT_OF_MEMORY')}s}", status[2])
+        # Extract fields
+        status_text = status[1].upper()
+        color = status[2]
+        slurm_status = status[3]
+
+        # Build Rich text objects with color styles
+        status_rich = Text(status_text, style=color)
+        slurm_rich = Text(slurm_status, style=color)
+
         return [
             task.is_in_successful_terminal_state,
             task.id,
             task.name,
             task.slurmid,
-            formatted_slurmstatus,
-            formatted_status,
-            #task.get_duration(),
+            slurm_rich,
+            status_text,
             [t._queue_id for t in task.task_dependencies],
-            #[str(d) for d in task.dependencies if isinstance(d, Path)],
-            #[str(p) for p in task.products]
         ]
+
 
     def _clear_screen(self):
         if self.CLEAR_SCREEN: sys.stdout.write("\033[2J\033[H")
 
+
+    def _start_keyboard_listener(self):
+        q = queue.Queue()
+
+        def listen():
+            fd = sys.stdin.fileno()
+            old = termios.tcgetattr(fd)
+            try:
+                tty.setcbreak(fd)
+                while True:
+                    c = sys.stdin.read(1)
+                    q.put(c)
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+        t = threading.Thread(target=listen, daemon=True)
+        t.start()
+        return q
+
+
     def _print_tasks(self):
-        self._clear_screen()
-        headers = ["ID", "Name", "Slurm ID", "Slurm Status", "Status", "Task Deps."]
+        headers = ["ID", "Name", "Slurm ID", "Slurm Status", "Status", "Task Deps"]
 
-        tasks_data = [self._get_text_for_task(task) for task in self.tasks]
+        table = Table(show_lines=False, expand=True)
+        for h in headers:
+            table.add_column(h)
 
-        # Generate and print the histogram for tasks_data[5]
         histogram = {}
-        for task_data in tasks_data:
-            s = task_data[5]
-            histogram[s] = histogram.get(s, 0) + 1
 
-        if self.HIDE_SUCCESSFUL_TERMINATED_TASKS:
-            tasks_data = [td[1:] for td in tasks_data if not td[0] == True]
-        else:
-            tasks_data = [td[1:] for td in tasks_data]
+        for task in self.tasks:
+            is_success, tid, name, slurm_id, slurm_status, status, deps = self._get_text_for_task(task)
 
-        table_str = tabulate(tasks_data, headers=headers, tablefmt="plain")
-        print()
-        print("Tasks:")
-        print(table_str)
+            histogram[status] = histogram.get(status, 0) + 1
 
-        print("\nSummary:")
-        for string, count in histogram.items():
-            print(f"{string}: {count:4d} tasks")
+            if self.HIDE_SUCCESSFUL_TERMINATED_TASKS and is_success:
+                continue
 
+            table.add_row(
+                str(tid),
+                str(name),
+                str(slurm_id),
+                str(slurm_status),
+                str(status),
+                ", ".join(str(d) for d in deps)
+            )
+
+        # Summary table
+        summary = Table(show_header=True, header_style="bold magenta")
+        summary.add_column("Status")
+        summary.add_column("Count", justify="right")
+
+        for status, count in histogram.items():
+            summary.add_row(status, str(count))
+
+        return Panel(Group(table, summary), title=f"Pipeline: {self.name}")
+
+        
 
     def exit_with_failed_tasks(self) -> None:
         print()

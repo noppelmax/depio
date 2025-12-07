@@ -47,7 +47,6 @@ class AbstractTaskExecutor(ABC):
         return self.max_jobs_pending is not None
 
 
-@frozen
 class SequentialExecutor(AbstractTaskExecutor):
     """
     A very dumb executor, that is just executing a given task right away.

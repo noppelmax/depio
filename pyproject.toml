@@ -18,7 +18,8 @@ dependencies = [
     "submitit",
     "coverage",
     "termcolor",
-    "attrs"
+    "attrs",
+    "rich (>=14.2.0,<15.0.0)"
 ]
 
 [tool.pytest.ini_options]
