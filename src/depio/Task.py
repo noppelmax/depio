@@ -89,7 +89,7 @@ def _parse_annotation_for_metaclass(func, metaclass) -> List[str]:
 
             metadata = args[1:]
             if any(meta is metaclass for meta in metadata):
-                results.append(name)
+                results.extend(name if isinstance(name, List) else [name])
 
     return results
 
