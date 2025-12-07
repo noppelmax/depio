@@ -10,6 +10,18 @@ from .Task import Task
 
 
 class AbstractTaskExecutor(ABC):
+
+    def __init__(self, max_jobs_pending: int = None, max_jobs_queued: int = None):
+        """
+        Abstract class for task executors.
+        :param max_jobs_pending: Maximum number of jobs that can be pending at the same time. If None, no limit is applied.
+        :param max_jobs_queued: Maximum number of jobs that can be queued at the same time. If None, no limit is applied.
+        """
+
+        # Set the maximum number of jobs to run concurrently, None means no limit.
+        self.max_jobs_pending = max_jobs_pending
+        self.max_jobs_queued = max_jobs_queued
+
     @abstractmethod
     def submit(self, task, task_dependencies: List[Task] = None):
         ...
@@ -26,6 +38,14 @@ class AbstractTaskExecutor(ABC):
     def handles_dependencies(self):
         ...
 
+    @property
+    def has_jobs_queued_limit(self):
+        return self.max_jobs_queued is not None
+
+    @property
+    def has_jobs_pending_limit(self):
+        return self.max_jobs_pending is not None
+
 
 @frozen
 class SequentialExecutor(AbstractTaskExecutor):
@@ -33,6 +53,10 @@ class SequentialExecutor(AbstractTaskExecutor):
     A very dumb executor, that is just executing a given task right away.
     It can be used for debugging purposes.
     """
+
+    def __init__(self, max_jobs_pending: int = None, max_jobs_queued: int = None):
+        super().__init__(max_jobs_pending=max_jobs_pending, max_jobs_queued=max_jobs_queued)
+        print("depio-SequentialExecutor initialized")
 
     def submit(self, task, task_dependencies: List[Task] = None):
         print("==========================================================")
@@ -52,7 +76,8 @@ class SequentialExecutor(AbstractTaskExecutor):
 
 class ParallelExecutor(AbstractTaskExecutor):
 
-    def __init__(self, internal_executor: concurrent.futures.Executor = None, **kwargs):
+    def __init__(self, internal_executor: concurrent.futures.Executor = None, max_jobs_pending: int = None, max_jobs_queued: int = None, **kwargs):
+        super().__init__(max_jobs_pending=max_jobs_pending, max_jobs_queued=max_jobs_queued)
         self.internal_executor = internal_executor if internal_executor is not None else ThreadPoolExecutor()
         self.running_jobs = []
         self.running_tasks = []
@@ -86,7 +111,8 @@ DEFAULT_PARAMS = {
 
 class SubmitItExecutor(AbstractTaskExecutor):
 
-    def __init__(self, folder: Path = None, internal_executor=None, parameters=None):
+    def __init__(self, folder: Path = None, internal_executor=None, parameters=None, max_jobs_pending: int = 45, max_jobs_queued: int = 20):
+        super().__init__(max_jobs_pending=max_jobs_pending, max_jobs_queued=max_jobs_queued)
 
         # Overwrite with a default executor.
         if internal_executor is None:

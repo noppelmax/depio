@@ -107,6 +107,20 @@ class Pipeline:
             for t_dep in task.task_dependencies:
                 t_dep.add_dependent_task(task)
 
+    def _get_non_terminal_tasks(self) -> List[Task]:
+        """
+        Get all tasks that are not in a terminal state.
+        :return: List of tasks that are not in a terminal state.
+        """
+        return [task for task in self.tasks if not task.is_in_terminal_state]
+    
+    def _get_pending_tasks(self) -> List[Task]:
+        """
+        Get all tasks that are in pending or unknown state.
+        :return: List of tasks that are pending or unknown.
+        """
+        return [task for task in self.tasks if task.status[0] in [TaskStatus.PENDING, TaskStatus.UNKNOWN]]
+
     def run(self) -> None:
         enable_proxy()
         self._solve_order()
@@ -122,13 +136,23 @@ class Pipeline:
                                 self.depioExecutor.submit(task, task.task_dependencies)
                                 self.handled_tasks.append(task)
                             elif task.is_ready_for_execution():
-                                if len([t for t  in self.handled_tasks if t.status[0] in [TaskStatus.PENDING,TaskStatus.UNKNOWN]]) > 20:
-                                    pass # Only have n jobs in pending. # TODO Make the 20 a variable n!
-                                elif len([t for t  in self.handled_tasks if not t.is_in_terminal_state]) > 45:
-                                    pass # Only have at most 45 jobs in non-terminal states. (Do not overload the BWUniCluster)
-                                else:
-                                    self.depioExecutor.submit(task, task.task_dependencies)
-                                    self.handled_tasks.append(task)
+                                # The task is ready to run
+
+                                # Check queued/pending limits
+                                if self.depioExecutor.has_jobs_queued_limit:
+                                    # Check if we reached the limit of queued jobs
+                                    n_pending_tasks = len(self._get_non_terminal_tasks())
+                                    if n_pending_tasks >= self.depioExecutor.max_jobs_queued:
+                                        continue
+                                elif self.depioExecutor.has_jobs_pending_limit:
+                                    # Check if we reached the limit of pending/running jobs
+                                    n_non_terminal_tasks = len(self._get_pending_tasks())
+                                    if n_non_terminal_tasks >= self.depioExecutor.max_jobs_pending:
+                                        continue
+
+                                # submit the task
+                                self.depioExecutor.submit(task, task.task_dependencies)
+                                self.handled_tasks.append(task)
                             else:
                                 pass
 
