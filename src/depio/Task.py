@@ -476,6 +476,11 @@ class Task:
             return self.stdout.getvalue()
         else:
             return self.slurmjob.stdout()
+        
+    def __hash__(self):
+        # Hash based on function and cleaned_args
+        return hash((id(self.func), tuple(sorted(self.cleaned_args.items()))))
+    
 
 
 __all__ = [Task, Product, Dependency, _get_not_updated_products]

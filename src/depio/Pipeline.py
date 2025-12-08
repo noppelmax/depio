@@ -93,30 +93,50 @@ class Pipeline:
         return task
 
     def _solve_order(self) -> None:
-        # Generate a task to product mapping.
-        product_to_task: Dict[Path, Task] = {product: task for task in self.tasks for product in task.products}
-
+        # Generate a task to product mapping
+        product_to_task: Dict[Path, Task] = {}
+        for task in self.tasks:
+            for product in task.products:
+                product_to_task[product] = task
+        
+        unavailable_dependencies = []
+        
         # Add the dependencies to the tasks
         for task in self.tasks:
-            # First spit of into tasks and paths
-            task_deps = [d for d in task.dependencies if isinstance(d, Task)]
-            path_deps = [d for d in task.dependencies if isinstance(d, Path)]
-
-            # Verify that each dependency is available and add if yes.
-            unavailable_dependencies = [d for d in path_deps if d not in product_to_task and not d.exists()]
-            if len(unavailable_dependencies) > 0:
-                raise DependencyNotAvailableException(f"Dependency/ies '{unavailable_dependencies}' "
-                                                      f"do/es not exist and can not be produced.")
-
-            # Add the tasks that produce path_deps and remove such deps from the path_deps
+            # Build task dependencies list - use id() for deduplication
+            seen_ids = set()
             task.task_dependencies = []
-            for t in ([product_to_task[d] for d in path_deps if d in product_to_task] + task_deps):
-                if not t in task.task_dependencies: task.task_dependencies.append(t)
-
-            task.path_dependencies = \
-                [d for d in path_deps if d not in product_to_task]
-
-        # Adding the backlinks
+            task.path_dependencies = []
+            
+            for d in task.dependencies:
+                if isinstance(d, Task):
+                    # Direct task dependency
+                    t_id = id(d)
+                    if t_id not in seen_ids:
+                        seen_ids.add(t_id)
+                        task.task_dependencies.append(d)
+                else:  # Path dependency
+                    # Check if path is produced by a task
+                    producing_task = product_to_task.get(d)
+                    if producing_task is not None:
+                        t_id = id(producing_task)
+                        if t_id not in seen_ids:
+                            seen_ids.add(t_id)
+                            task.task_dependencies.append(producing_task)
+                    else:
+                        # Path dependency that must already exist
+                        task.path_dependencies.append(d)
+                        if not d.exists():
+                            unavailable_dependencies.append(d)
+        
+        # Raise error if there are unavailable dependencies
+        if unavailable_dependencies:
+            dep_list = ', '.join(str(d) for d in unavailable_dependencies)
+            raise DependencyNotAvailableException(
+                f"The following dependencies do not exist and cannot be produced: {dep_list}"
+            )
+        
+        # Add backlinks from dependencies to dependents
         for task in self.tasks:
             for t_dep in task.task_dependencies:
                 t_dep.add_dependent_task(task)
@@ -280,21 +300,22 @@ class Pipeline:
 
     def _print_tasks(self):
         headers = ["ID", "Name", "Slurm ID", "Slurm Status", "Status", "Task Deps"]
-
-        table = Table(show_lines=False, expand=True)
+        table = Table(
+            show_lines=True, 
+            expand=True,
+            border_style="white",
+            header_style="bold white",
+            row_styles=["", "dim"]
+        )
         for h in headers:
-            table.add_column(h)
-
+            table.add_column(h, style="white")
+        
         histogram = {}
-
         for task in self.tasks:
             is_success, tid, name, slurm_id, slurm_status, status, deps = self._get_text_for_task(task)
-
             histogram[status] = histogram.get(status, 0) + 1
-
             if self.HIDE_SUCCESSFUL_TERMINATED_TASKS and is_success:
                 continue
-
             table.add_row(
                 str(tid),
                 str(name),
@@ -303,15 +324,14 @@ class Pipeline:
                 str(status),
                 ", ".join(str(d) for d in deps)
             )
-
+        
         # Summary table
-        summary = Table(show_header=True, header_style="bold magenta")
-        summary.add_column("Status")
-        summary.add_column("Count", justify="right")
-
+        summary = Table(show_header=True, header_style="bold magenta", border_style="magenta", expand=True)
+        summary.add_column("Status", style="bold")
+        summary.add_column("Count", justify="right", style="cyan")
         for status, count in histogram.items():
             summary.add_row(status, str(count))
-
+        
         # Command panel
         command_text = Text()
         command_text.append("Pipeline Status: ", style="bold")
@@ -330,20 +350,23 @@ class Pipeline:
         command_text.append("esume  ", style="dim")
         command_text.append("Q", style="bold cyan")
         command_text.append("uit", style="dim")
-
+        
         command_panel = Panel(
             command_text,
             title="[bold]Interactive Commands[/bold]",
             border_style="blue",
             subtitle="[dim]Press keys directly (no Enter needed)[/dim]"
         )
-
-        return Panel(
-            Group(table, summary, command_panel), 
-            title=f"Pipeline: {self.name}"
-        )
-
         
+        # Create side-by-side layout with table and summary
+        from rich.columns import Columns
+        top_section = Columns([table, summary], expand=True)
+        
+        return Panel(
+            Group(top_section, command_panel), 
+            title=f"Pipeline: {self.name}"
+    )
+   
 
     def _restore_terminal(self):
         """Restore terminal to normal mode."""
