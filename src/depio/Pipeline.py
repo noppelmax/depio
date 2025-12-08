@@ -11,9 +11,6 @@ from rich.console import Group
 from rich.live import Live
 from rich.text import Text
 
-import termios
-import tty
-
 import threading
 import queue
 
@@ -51,6 +48,10 @@ class Pipeline:
         if not self.QUIET: print("Pipeline initialized")
 
         self.paused = False
+        self.command_queue = queue.Queue()
+        self.last_command_message = ""
+        self.last_key_press_time = 0
+        self.key_sequence = []
 
     def add_tasks(self, tasks: List[Task]) -> None:
         for task in tasks:
@@ -134,58 +135,120 @@ class Pipeline:
         """
         return [task for task in self.tasks if task.status[0] in [TaskStatus.PENDING, TaskStatus.UNKNOWN]]
 
+    def _check_for_keypress(self):
+        """Check for single key commands (no Enter needed)."""
+        try:
+            import sys
+            import select
+            
+            # Only works on Unix-like systems
+            if not (hasattr(select, 'select') and hasattr(sys.stdin, 'fileno')):
+                return
+                
+            # Check if there's input available (non-blocking)
+            if select.select([sys.stdin], [], [], 0.0)[0]:
+                char = sys.stdin.read(1)
+                current_time = time.time()
+                
+                # Reset sequence if too much time has passed
+                if current_time - self.last_key_press_time > 1.0:
+                    self.key_sequence = []
+                
+                self.last_key_press_time = current_time
+                self.key_sequence.append(char)
+                
+                # Process single key commands
+                if char.lower() == 'p':
+                    self.paused = True
+                    self.last_command_message = "✓ Pipeline paused (press 'r' to resume)"
+                    self.key_sequence = []
+                elif char.lower() == 'r':
+                    self.paused = False
+                    self.last_command_message = "✓ Pipeline resumed"
+                    self.key_sequence = []
+                elif char.lower() == 'q':
+                    # Check for 'qq' to quit (safety measure)
+                    self.last_command_message = "✓ Shutting down..."
+                    self.exit_with_failed_tasks()
+        except (ImportError, OSError):
+            # System doesn't support select, skip keyboard handling
+            pass
+
     def run(self) -> None:
         enable_proxy()
         self._solve_order()
         self.handled_tasks = []
 
-        #key_queue = self._start_keyboard_listener()
+        # Try to set terminal to non-blocking mode for better UX
+        self._old_terminal_settings = None
+        try:
+            import termios
+            import tty
+            self._old_terminal_settings = termios.tcgetattr(sys.stdin)
+            tty.setcbreak(sys.stdin.fileno())
+            restore_terminal = True
+        except (ImportError, OSError, AttributeError):
+            restore_terminal = False
+            if not self.QUIET:
+                print("Note: Interactive commands not available on this system")
 
-        with Live(refresh_per_second=5, console=None) as live:
-            while True:
-                try:
-                    if self.paused:
-                        time.sleep(self.REFRESHRATE)
-                        continue
+        try:
+            with Live(refresh_per_second=5, console=None) as live:
+                while True:
+                    try:
+                        # Check for keyboard input
+                        if restore_terminal:
+                            self._check_for_keypress()
 
-                    # Submit new runnable tasks
-                    for task in self.tasks:
-                        if task in self.handled_tasks:
+                        if self.paused:
+                            # Update UI even when paused
+                            if not self.QUIET:
+                                live.update(self._print_tasks())
+                            time.sleep(self.REFRESHRATE)
                             continue
 
-                        if task.is_ready_for_execution() or self.depioExecutor.handles_dependencies():
-                            if task.should_run():
+                        # Submit new runnable tasks
+                        for task in self.tasks:
+                            if task in self.handled_tasks:
+                                continue
 
-                                if not self.SUBMIT_ONLY_IF_RUNNABLE:
-                                    self.depioExecutor.submit(task, task.task_dependencies)
-                                    self.handled_tasks.append(task)
-                                elif task.is_ready_for_execution():
-                                    if self.depioExecutor.has_jobs_queued_limit:
-                                        if len(self._get_non_terminal_tasks()) >= self.depioExecutor.max_jobs_queued:
-                                            continue
-                                    elif self.depioExecutor.has_jobs_pending_limit:
-                                        if len(self._get_pending_tasks()) >= self.depioExecutor.max_jobs_pending:
-                                            continue
+                            if task.is_ready_for_execution() or self.depioExecutor.handles_dependencies():
+                                if task.should_run():
 
-                                    self.depioExecutor.submit(task, task.task_dependencies)
-                                    self.handled_tasks.append(task)
+                                    if not self.SUBMIT_ONLY_IF_RUNNABLE:
+                                        self.depioExecutor.submit(task, task.task_dependencies)
+                                        self.handled_tasks.append(task)
+                                    elif task.is_ready_for_execution():
+                                        if self.depioExecutor.has_jobs_queued_limit:
+                                            if len(self._get_non_terminal_tasks()) >= self.depioExecutor.max_jobs_queued:
+                                                continue
+                                        elif self.depioExecutor.has_jobs_pending_limit:
+                                            if len(self._get_pending_tasks()) >= self.depioExecutor.max_jobs_pending:
+                                                continue
 
-                    # Update the rich UI
-                    if not self.QUIET:
-                        live.update(self._print_tasks())
+                                        self.depioExecutor.submit(task, task.task_dependencies)
+                                        self.handled_tasks.append(task)
 
-                    # Exit conditions
-                    if all(task.is_in_terminal_state for task in self.tasks):
-                        if any(task.is_in_failed_terminal_state for task in self.tasks):
-                            self.exit_with_failed_tasks()
-                        else:
-                            self.exit_successful()
+                        # Update the rich UI
+                        if not self.QUIET:
+                            live.update(self._print_tasks())
 
-                    time.sleep(self.REFRESHRATE)
+                        # Exit conditions
+                        if all(task.is_in_terminal_state for task in self.tasks):
+                            if any(task.is_in_failed_terminal_state for task in self.tasks):
+                                self.exit_with_failed_tasks()
+                            else:
+                                self.exit_successful()
 
-                except KeyboardInterrupt:
-                    print("Stopping execution because of keyboard interrupt!")
-                    self.exit_with_failed_tasks()
+                        time.sleep(self.REFRESHRATE)
+
+                    except KeyboardInterrupt:
+                        print("\nStopping execution because of keyboard interrupt!")
+                        self.exit_with_failed_tasks()
+
+        finally:
+            # Restore terminal settings
+            self._restore_terminal()
 
 
     def _get_text_for_task(self, task):
@@ -213,25 +276,6 @@ class Pipeline:
 
     def _clear_screen(self):
         if self.CLEAR_SCREEN: sys.stdout.write("\033[2J\033[H")
-
-
-    def _start_keyboard_listener(self):
-        q = queue.Queue()
-
-        def listen():
-            fd = sys.stdin.fileno()
-            old = termios.tcgetattr(fd)
-            try:
-                tty.setcbreak(fd)
-                while True:
-                    c = sys.stdin.read(1)
-                    q.put(c)
-            finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old)
-
-        t = threading.Thread(target=listen, daemon=True)
-        t.start()
-        return q
 
 
     def _print_tasks(self):
@@ -268,11 +312,52 @@ class Pipeline:
         for status, count in histogram.items():
             summary.add_row(status, str(count))
 
-        return Panel(Group(table, summary), title=f"Pipeline: {self.name}")
+        # Command panel
+        command_text = Text()
+        command_text.append("Pipeline Status: ", style="bold")
+        if self.paused:
+            command_text.append("⏸ PAUSED", style="bold yellow")
+        else:
+            command_text.append("▶ RUNNING", style="bold green")
+        
+        if self.last_command_message:
+            command_text.append("\n\n" + self.last_command_message, style="italic cyan")
+        
+        command_text.append("\n\nQuick Commands: ", style="bold")
+        command_text.append("P", style="bold cyan")
+        command_text.append("ause  ", style="dim")
+        command_text.append("R", style="bold cyan")
+        command_text.append("esume  ", style="dim")
+        command_text.append("Q", style="bold cyan")
+        command_text.append("uit", style="dim")
+
+        command_panel = Panel(
+            command_text,
+            title="[bold]Interactive Commands[/bold]",
+            border_style="blue",
+            subtitle="[dim]Press keys directly (no Enter needed)[/dim]"
+        )
+
+        return Panel(
+            Group(table, summary, command_panel), 
+            title=f"Pipeline: {self.name}"
+        )
 
         
 
+    def _restore_terminal(self):
+        """Restore terminal to normal mode."""
+        if hasattr(self, '_old_terminal_settings') and self._old_terminal_settings is not None:
+            try:
+                import termios
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self._old_terminal_settings)
+            except:
+                pass
+
     def exit_with_failed_tasks(self) -> None:
+        # Restore terminal first
+        self._restore_terminal()
+        
         print()
 
         # Print the overview with the updated status once more.
@@ -307,6 +392,9 @@ class Pipeline:
         exit(1)
 
     def exit_successful(self) -> None:
+        # Restore terminal first
+        self._restore_terminal()
+        
         # Print the overview with the updated status once more.
         for task in self.tasks:
             task.is_ready_for_execution()
