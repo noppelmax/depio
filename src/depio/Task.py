@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 import typing
 import time
@@ -64,34 +65,60 @@ def _get_args_dict(fn, args, kwargs) -> Dict[str, typing.Any]:
     args_names = fn.__code__.co_varnames[:fn.__code__.co_argcount]
     return {**dict(zip(args_names, args)), **kwargs}
 
+def _get_args_dict_nested(fn, args, kwargs) -> Dict[str, typing.Any]:
+    args_names = fn.__code__.co_varnames[:fn.__code__.co_argcount]
+    base = {**dict(zip(args_names, args)), **kwargs}
 
-def _parse_annotation_for_metaclass(func, metaclass) -> List[str]:
+    expanded = dict(base)   # copy
+
+    for name, value in base.items():
+        if isinstance(value, list):
+            # Expand into fake keys: name[0], name[1], ...
+            for i, element in enumerate(value):
+                expanded[f"{name}_{i}"] = element
+
+    return expanded
+
+
+
+def _parse_annotation_for_metaclass(func, args_dict, metaclass) -> List[str]:
     if python_version_is_greater_or_equal_to_3_10():
-        # For python 3.10 and newer
-        # annotations = inspect.get_annotations(func)
-
-        # According to https://docs.python.org/3/howto/annotations.html this is best practice now.
-        annotations = getattr(func, '__annotations__', None)
+        annotations = getattr(func, "__annotations__", None)
     else:
-        # For python 3.9 and older
         if isinstance(func, type):
-            annotations = func.__dict__.get('__annotations__', None)
+            annotations = func.__dict__.get("__annotations__", None)
         else:
-            annotations = getattr(func, '__annotations__', None)
+            annotations = getattr(func, "__annotations__", None)
 
     results: List[str] = []
 
+    def expand_list(name: str, value:List):
+        """Return ['name[0]', 'name[1]', ...] based on default list size,
+        or ['name[]'] if no runtime size is available."""
+        if isinstance(value, list):
+            return [f"{name}_{i}" for i in range(len(value))]
+        return [f"{name}"]
+
     for name, annotation in annotations.items():
+
+        # Annotated[T, metadata...]
         if get_origin(annotation) is Annotated:
-            args = get_args(annotation)
-            if len(args) <= 1:
-                continue
+            assert len(get_args(annotation)) == 2, f"Malformed annotation. Expected Annotated[T, meta], but got {annotation}"
+            
+            T, *metadata = get_args(annotation)
 
-            metadata = args[1:]
             if any(meta is metaclass for meta in metadata):
-                results.extend(name if isinstance(name, List) else [name])
-
+                # Annotated[List[T], Meta]
+                if get_origin(T) in (list, List):
+                    val = args_dict[name]
+                    results.extend(expand_list(name, val))
+                    
+                # Annotated[T, Meta]
+                else:
+                    results.append(name)
+            
     return results
+
 
 
 def _get_not_updated_products(product_timestamps_after_running: typing.Dict,
@@ -136,17 +163,19 @@ class Task:
         self._slurmid = None
         self._slurmstate: str = ""
 
-        # Parse dependencies and products from the annotations and merge with args
-        products_args: List[str] = _parse_annotation_for_metaclass(func, Product)
-        dependencies_args: List[str] = _parse_annotation_for_metaclass(func, Dependency)
-        ignored_for_eq_args: List[str] = _parse_annotation_for_metaclass(func, IgnoredForEq)
-
         # Allow the task to specify an argument resolver. This can be used to load default values dynamically.
         # And in particular, before the DAG is constructed.
         if arg_resolver is not None:
             self.func_args, self.func_kwargs = arg_resolver(self.func, self.func_args, self.func_kwargs)
 
         args_dict: Dict[str, typing.Any] = _get_args_dict(func, self.func_args, self.func_kwargs)
+
+        # Parse dependencies and products from the annotations and merge with args
+        products_args: List[str] = _parse_annotation_for_metaclass(func, args_dict, Product)
+        dependencies_args: List[str] = _parse_annotation_for_metaclass(func, args_dict, Dependency)
+        ignored_for_eq_args: List[str] = _parse_annotation_for_metaclass(func, args_dict, IgnoredForEq)
+
+        args_dict: Dict[str, typing.Any] = _get_args_dict_nested(func, self.func_args, self.func_kwargs)
         self.cleaned_args: Dict[str, typing.Any] = {k: v for k, v in args_dict.items() if k not in ignored_for_eq_args}
 
         self.products: List[Path] = \
