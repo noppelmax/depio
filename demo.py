@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, List
 import pathlib
 import time
 
@@ -15,7 +15,7 @@ defaultpipeline = Pipeline(depioExecutor=depioExecutor, clear_screen=False)
 # Use the decorator with args and kwargs
 @task("datapipeline", buildmode=BuildMode.ALWAYS)
 def funcdec(
-        output: Annotated[pathlib.Path, Product],
+        output: Annotated[List[pathlib.Path], Product],
         sec: int,
         input: Annotated[pathlib.Path, Dependency] = None
             ):
@@ -23,8 +23,10 @@ def funcdec(
     time.sleep(sec)
     if False and input == BLD/"output1.txt":
         raise Exception("Demo exception")
-    with open(output,'w') as f:
-        f.write("Hallo from depio")
+    if not isinstance(output, list): output = [output]
+    for o in output:
+        with open(o,'w') as f:
+            f.write("Hallo from depio")
     return 1
 
 
@@ -36,6 +38,6 @@ defaultpipeline.add_task(funcdec(BLD/"output1.txt",sec=2,input=BLD/"input.txt"))
 t1 = defaultpipeline.add_task(funcdec(BLD/"output2.txt",sec=1,input=BLD/"input.txt"))
 defaultpipeline.add_task(funcdec(BLD/"final1.txt",sec=1,input=BLD/"output1.txt"))
 defaultpipeline.add_task(funcdec(BLD/"final_final1.txt",sec=2,input=BLD/"final1.txt"))
-defaultpipeline.add_task(funcdec(output=BLD/"final_final2.txt",sec=2))
+defaultpipeline.add_task(funcdec(output=[BLD/"final_final2.txt", BLD/"final_final3.txt"],sec=2))
 
 exit(defaultpipeline.run())
