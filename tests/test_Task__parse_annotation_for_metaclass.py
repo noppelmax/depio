@@ -17,7 +17,7 @@ class TestParseAnnotationForMetaclass(unittest.TestCase):
         def dummy_function(inputa :Annotated[str, A]) -> None: pass
 
         expected_result = ['inputa']  # 'return' is the annotation name for function return type
-        parsed_annotations = _parse_annotation_for_metaclass(dummy_function, A)
+        parsed_annotations = _parse_annotation_for_metaclass(dummy_function, {}, A)
         self.assertEqual(parsed_annotations, expected_result)
 
     def test_parse_annotation_for_metaclass_return(self):
@@ -26,7 +26,7 @@ class TestParseAnnotationForMetaclass(unittest.TestCase):
         def dummy_function() -> Annotated[str, A]: pass
 
         expected_result = ['return']  # 'return' is the annotation name for function return type
-        parsed_annotations = _parse_annotation_for_metaclass(dummy_function, A)
+        parsed_annotations = _parse_annotation_for_metaclass(dummy_function, {}, A)
         self.assertEqual(parsed_annotations, expected_result)
 
     def test_parse_annotation_for_metaclass_no_args(self):
@@ -34,7 +34,7 @@ class TestParseAnnotationForMetaclass(unittest.TestCase):
 
         def dummy_function() -> None: pass
 
-        parsed_annotations = _parse_annotation_for_metaclass(dummy_function, A)
+        parsed_annotations = _parse_annotation_for_metaclass(dummy_function, {}, A)
         self.assertEqual(parsed_annotations, [])
 
     def test_parse_annotation_for_metaclass_no_metaclass(self):
@@ -43,7 +43,7 @@ class TestParseAnnotationForMetaclass(unittest.TestCase):
         # Change metaclass in function annotation
         def dummy_function() -> Annotated[str, list]: pass
 
-        parsed_annotations = _parse_annotation_for_metaclass(dummy_function, A)
+        parsed_annotations = _parse_annotation_for_metaclass(dummy_function, {}, A)
         self.assertEqual(parsed_annotations, [])
 
     def test_parse_annotation_for_metaclass_no_annotations(self):
@@ -51,7 +51,7 @@ class TestParseAnnotationForMetaclass(unittest.TestCase):
 
         def dummy_function(a, b): pass  # No type annotations
 
-        parsed_annotations = _parse_annotation_for_metaclass(dummy_function, A)
+        parsed_annotations = _parse_annotation_for_metaclass(dummy_function, {}, A)
         self.assertEqual(parsed_annotations, [])
 
 
