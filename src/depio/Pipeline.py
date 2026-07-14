@@ -1,7 +1,9 @@
+from dataclasses import dataclass, field
 from typing import Set, Dict, List, Optional, Callable, TYPE_CHECKING
 from pathlib import Path
 import queue
 import re
+import threading
 import time
 import sys
 
@@ -24,6 +26,27 @@ from .exceptions import (
     TaskNotInQueueException,
     DependencyNotAvailableException,
 )
+
+
+@dataclass
+class PipelineTuiState:
+    """All mutable display/interaction state for the Pipeline TUI.
+
+    Separated from Pipeline's core state (task list, executor, hooks) so the
+    two concerns don't bleed into each other.  Both ``_tui.py`` and
+    ``_input.py`` read/write this object via ``pipeline.tui``.
+    """
+    paused: bool = False
+    last_command_message: str = ""
+    last_key_press_time: float = 0.0
+    key_sequence: List[str] = field(default_factory=list)
+    selected_task_idx: Optional[int] = None
+    detail_mode: bool = False
+    scroll_offset: int = 0
+    pipeline_done: bool = False
+    pipeline_failed: bool = False
+    quit_confirmation_pending: bool = False
+    quit_requested: bool = False
 
 
 class Pipeline:
@@ -53,29 +76,14 @@ class Pipeline:
         self.name: str = name
         self.handled_tasks: Optional[List[Task]] = None
         self.tasks: List[Task] = []
-        self._task_set: set = set()          # mirrors self.tasks for O(1) duplicate lookup
+        self._task_set: set = set()
         self.depioExecutor: AbstractTaskExecutor = depioExecutor
         self.registered_products: Set[Path] = set()
         self._registered_product_strs: Set[str] = set()
 
-        # Interactive TUI state
-        self.paused = False
-        self.command_queue = queue.Queue()
-        self.last_command_message = ""
-        self.last_key_press_time = 0
-        self.key_sequence = []
-        self._selected_task_idx: Optional[int] = None
-        self._detail_mode: bool = False
+        self.tui = PipelineTuiState()
         self._live: Optional["Live"] = None
-        self._scroll_offset: int = 0
-        self._pipeline_done: bool = False
-        self._pipeline_failed: bool = False
         self._hook_fired_tasks: set = set()
-        self._quit_confirmation_pending: bool = False
-        self._animation_frame: int = 0
-        self._filter_mode: bool = False
-        self._filter_string: str = ""
-        self._view_mode_idx: int = 0  # 0=All, 1=Pending, 2=Running, 3=Failed, 4=Finished
 
     # ── Task registration ──────────────────────────────────────────────────────
 
@@ -219,37 +227,33 @@ class Pipeline:
                     duration=float(task.get_duration()),
                     outputs=list(task.products),
                 )
-                # on_task_finished — global then per-task
                 for hook in filter(None, [self.on_task_finished, task.on_finished]):
                     try:
                         hook(result)
                     except Exception as e:
-                        self.last_command_message = f"Hook error: {e}"
-                # on_task_failed — fires only on direct failure
+                        self.tui.last_command_message = f"Hook error: {e}"
                 if result.status == TaskStatus.FAILED:
                     for hook in filter(None, [self.on_task_failed, task.on_task_failed]):
                         try:
                             hook(result)
                         except Exception as e:
-                            self.last_command_message = f"Hook error: {e}"
+                            self.tui.last_command_message = f"Hook error: {e}"
 
     def _check_pipeline_completion(self) -> None:
-        # Mark done but stay alive so the user can browse stdouts
-        if not self._pipeline_done and all(
+        if not self.tui.pipeline_done and all(
                 task.is_in_terminal_state for task in self.tasks):
-            self._pipeline_done = True
-            self._pipeline_failed = any(
+            self.tui.pipeline_done = True
+            self.tui.pipeline_failed = any(
                 task.is_in_failed_terminal_state for task in self.tasks)
-            self.last_command_message = (
+            self.tui.last_command_message = (
                 "Pipeline finished with failures. Press Q to quit."
-                if self._pipeline_failed else
+                if self.tui.pipeline_failed else
                 "All tasks finished. Press Q to quit."
             )
-            # on_pipeline_finished
             if self.on_pipeline_finished is not None:
                 pipeline_result = PipelineResult(
                     name=self.name,
-                    success=not self._pipeline_failed,
+                    success=not self.tui.pipeline_failed,
                     task_results=[
                         TaskResult(
                             name=t.name,
@@ -264,60 +268,100 @@ class Pipeline:
                 try:
                     self.on_pipeline_finished(pipeline_result)
                 except Exception as e:
-                    self.last_command_message = f"Pipeline hook error: {e}"
+                    self.tui.last_command_message = f"Pipeline hook error: {e}"
 
     def run(self) -> None:
         enable_proxy()
         self._solve_order()
         self.handled_tasks = []
 
-        restore_terminal = self._setup_keyboard()
-
         def _render(live, *, refresh=False):
             if self.QUIET:
                 return
             renderable = (render_task_detail(self)
-                          if self._detail_mode and self._selected_task_idx is not None
+                          if self.tui.detail_mode and self.tui.selected_task_idx is not None
                           else render_task_list(self))
             live.update(renderable, refresh=refresh)
 
         try:
-            with Live(screen=True, refresh_per_second=5,
-                      redirect_stdout=False, redirect_stderr=False) as live:
-                self._live = live
+            # 1. Logic for QUIET mode (No Live/TUI)
+            if self.QUIET:
                 while True:
+                    self._submit_ready_tasks()
+                    self._poll_slurm_statuses()
+                    self._fire_task_hooks()
+                    self._check_pipeline_completion()
+
+                    if self.tui.pipeline_done and (self.EXIT_WHEN_DONE or self.QUIET):
+                        return
+
+                    time.sleep(self.REFRESHRATE)
+
+            # 2. Logic for Interactive mode
+            # The TUI runs in a background daemon thread so the main thread can
+            # block inside _submit_ready_tasks() (e.g. SequentialExecutor) without
+            # freezing the display.  Task execution always stays on the calling
+            # thread, which keeps nested-pipeline patterns safe.
+            else:
+                tui_stop = threading.Event()
+
+                def _tui_loop():
+                    _restore = self._setup_keyboard()
                     try:
-                        if self.paused:
-                            deadline = time.time() + self.REFRESHRATE
-                            while time.time() < deadline:
-                                key_handled = restore_terminal and check_for_keypress(self)
-                                _render(live, refresh=key_handled)
-                                time.sleep(0.05)
-                            continue
+                        with Live(screen=True, refresh_per_second=5,
+                                  redirect_stdout=False, redirect_stderr=False) as live:
+                            self._live = live
+                            while not tui_stop.is_set():
+                                _render(live)
+                                deadline = time.time() + self.REFRESHRATE
+                                while time.time() < deadline and not tui_stop.is_set():
+                                    if _restore and check_for_keypress(self):
+                                        _render(live, refresh=True)
+                                    time.sleep(0.05)
+                    finally:
+                        if _restore:
+                            self._restore_terminal()
+
+                tui_thread = threading.Thread(
+                    target=_tui_loop, name="depio-tui", daemon=True)
+                tui_thread.start()
+
+                try:
+                    while True:
+                        if self.tui.quit_requested:
+                            break
 
                         self._submit_ready_tasks()
-                        _render(live)
                         self._poll_slurm_statuses()
                         self._fire_task_hooks()
                         self._check_pipeline_completion()
 
-                        if self._pipeline_done and self.EXIT_WHEN_DONE:
+                        if self.tui.pipeline_done and self.EXIT_WHEN_DONE:
                             return
 
-                        # Poll input at 50 ms intervals; redraw immediately on keypress
+                        # Sleep in small slices so a quit requested from the
+                        # TUI thread is picked up promptly instead of after a
+                        # full refresh interval.
                         deadline = time.time() + self.REFRESHRATE
-                        while time.time() < deadline:
-                            key_handled = restore_terminal and check_for_keypress(self)
-                            _render(live, refresh=key_handled)
+                        while time.time() < deadline and not self.tui.quit_requested:
                             time.sleep(0.05)
+                finally:
+                    tui_stop.set()
+                    tui_thread.join(timeout=2.0)
 
-                    except KeyboardInterrupt:
-                        print("\nStopping execution because of keyboard interrupt!")
+                # A quit was requested from the TUI thread.  Perform the actual
+                # exit here on the main thread so SystemExit terminates the
+                # process (raised off the main thread it would only kill the
+                # daemon TUI thread, leaving the pipeline running).
+                if self.tui.quit_requested:
+                    if self.tui.pipeline_done and not self.tui.pipeline_failed:
+                        self.exit_successful()
+                    else:
                         self.exit_with_failed_tasks()
 
-        finally:
-            self._restore_terminal()
-
+        except KeyboardInterrupt:
+            print("\nStopping execution because of keyboard interrupt!")
+            self.exit_with_failed_tasks()
     # ── Output saving ──────────────────────────────────────────────────────────
 
     @staticmethod
@@ -487,7 +531,6 @@ class Pipeline:
             Console().print(render_task_list(self))
 
         print("All jobs done! Exit.")
-        exit(0)
 
 
 __all__ = ["Pipeline", "TaskResult", "PipelineResult"]

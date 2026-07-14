@@ -3,7 +3,6 @@
 All functions receive the Pipeline object and return Rich renderables.
 They are private to the depio package (_-prefixed module).
 """
-from __future__ import annotations
 
 import shutil
 from typing import TYPE_CHECKING, Dict
@@ -36,79 +35,44 @@ _STATUS_DISPLAY = {
 
 
 def render_task_list(p: "Pipeline") -> Panel:
+    tui = p.tui
     has_slurm = any(task.slurmjob is not None for task in p.tasks)
 
-    # Build the display list: tasks that pass the visibility filter.
-    display_list = []
-    for i, task in enumerate(p.tasks):
-        # Apply view mode filter
-        if p._view_mode_idx == 1:  # Pending
-            from .TaskStatus import TaskStatus
-            if task.status[0] not in [TaskStatus.PENDING, TaskStatus.WAITING]:
-                continue
-        elif p._view_mode_idx == 2:  # Running
-            from .TaskStatus import TaskStatus
-            if task.status[0] != TaskStatus.RUNNING:
-                continue
-        elif p._view_mode_idx == 3:  # Failed
-            from .TaskStatus import TaskStatus
-            if not task.is_in_failed_terminal_state:
-                continue
-        elif p._view_mode_idx == 4:  # Finished
-            if not task.is_in_successful_terminal_state:
-                continue
-        # View mode 0 (All) shows everything
-        
-        # Skip if not matching filter
-        if p._filter_string:
-            filter_lower = p._filter_string.lower()
-            name_match = filter_lower in task.name.lower()
-            desc_match = task.description and filter_lower in task.description.lower()
-            if not (name_match or desc_match):
-                continue
-        # Skip if already hidden by HIDE_SUCCESSFUL_TERMINATED_TASKS
-        if p.HIDE_SUCCESSFUL_TERMINATED_TASKS and task.is_in_successful_terminal_state:
-            continue
-        display_list.append((i, task))
-    
+    display_list = [
+        (i, task) for i, task in enumerate(p.tasks)
+        if not (p.HIDE_SUCCESSFUL_TERMINATED_TASKS and task.is_in_successful_terminal_state)
+    ]
     total_display = len(display_list)
 
-    # Determine how many rows fit in the terminal.
     try:
         term_height = shutil.get_terminal_size().lines
     except Exception:
         term_height = 24
-    
-    # Calculate overhead: panel borders (2), table header+separator (2), Rule (1),
-    # footer (2), scroll hints (2), filter input if active (2), status message (1) = 9-12
-    overhead = 9
-    if p._filter_mode:
-        overhead += 2  # filter input line
-    if p.last_command_message and not p._quit_confirmation_pending:
-        overhead += 1  # status message line
-    max_rows = max(3, term_height - overhead)
+    max_rows = max(3, term_height - 9)
 
-    # Find where the selected task sits in the display list.
     selected_display_idx = None
-    if p._selected_task_idx is not None:
+    if tui.selected_task_idx is not None:
         for di, (i, _) in enumerate(display_list):
-            if i == p._selected_task_idx:
+            if i == tui.selected_task_idx:
                 selected_display_idx = di
                 break
 
-    # Auto-scroll to keep the selection inside the viewport.
     if selected_display_idx is not None:
-        if selected_display_idx < p._scroll_offset:
-            p._scroll_offset = selected_display_idx
-        elif selected_display_idx >= p._scroll_offset + max_rows:
-            p._scroll_offset = selected_display_idx - max_rows + 1
-    p._scroll_offset = max(0, min(p._scroll_offset, max(0, total_display - max_rows)))
+        if selected_display_idx < tui.scroll_offset:
+            tui.scroll_offset = selected_display_idx
+        elif selected_display_idx >= tui.scroll_offset + max_rows:
+            tui.scroll_offset = selected_display_idx - max_rows + 1
+    tui.scroll_offset = max(0, min(tui.scroll_offset, max(0, total_display - max_rows)))
 
-    visible = display_list[p._scroll_offset : p._scroll_offset + max_rows]
-    above   = p._scroll_offset
-    below   = total_display - (p._scroll_offset + len(visible))
+    visible = display_list[tui.scroll_offset : tui.scroll_offset + max_rows]
+    above   = tui.scroll_offset
+    below   = total_display - (tui.scroll_offset + len(visible))
 
     has_variants = any(task.description for task in p.tasks)
+    has_progress = any(
+        task.progress is not None and task.progress.total is not None
+        for task in p.tasks
+    )
 
     table = Table(
         box=box.SIMPLE_HEAD,
@@ -124,11 +88,12 @@ def render_task_list(p: "Pipeline") -> Panel:
     if has_slurm:
         table.add_column("Slurm ID",     width=10)
         table.add_column("Cluster State", width=14)
+    if has_progress:
+        table.add_column("Progress", width=22)
     table.add_column("Status", width=18)
     table.add_column("Time",   width=6,  justify="right")
     table.add_column("Deps",   width=8,  style="dim")
 
-    # Count all tasks for the status summary (including hidden ones).
     status_counts: Dict[str, int] = {}
     for task in p.tasks:
         label = task.status[1].upper()
@@ -144,38 +109,47 @@ def render_task_list(p: "Pipeline") -> Panel:
         duration = f"{d // 60}:{d % 60:02d}" if d else "–"
 
         deps_str = ",".join(str(t._queue_id) for t in (task.task_dependencies or [])) or "–"
-        row_style = "bold reverse" if i == p._selected_task_idx else None
+        row_style = "bold reverse" if i == tui.selected_task_idx else None
 
         variant_cells = [task.description or ""] if has_variants else []
+
+        progress_cells = []
+        if has_progress:
+            prog = task.progress
+            if prog is not None and prog.total is not None:
+                frac = prog.fraction or 0.0
+                bar_width = 12
+                filled = round(frac * bar_width)
+                bar = "█" * filled + "░" * (bar_width - filled)
+                pct = f"{frac * 100:.0f}%"
+                progress_cells = [Text.assemble((bar, "green"), (" ", ""), (pct, "dim"))]
+            else:
+                progress_cells = [Text("", style="dim")]
 
         if has_slurm:
             table.add_row(
                 str(task.id), task.name, *variant_cells,
                 str(task.slurmid or "–"), str(slurm_state or "–"),
-                badge, duration, deps_str,
+                *progress_cells, badge, duration, deps_str,
                 style=row_style,
             )
         else:
             table.add_row(
                 str(task.id), task.name, *variant_cells,
-                badge, duration, deps_str,
+                *progress_cells, badge, duration, deps_str,
                 style=row_style,
             )
 
     footer = Text()
-    if p._pipeline_done:
-        if p._pipeline_failed:
+    if tui.pipeline_done:
+        if tui.pipeline_failed:
             footer.append("✗ FAILED", style="bold red")
         else:
             footer.append("✓ DONE", style="bold green")
-    elif p.paused:
+    elif tui.paused:
         footer.append("⏸ PAUSED", style="bold yellow")
     else:
-        # Pulsating animation: cycle through 4 brightness levels
-        frames = ["●", "◐", "○", "◑"]
-        frame = frames[(p._animation_frame // 2) % len(frames)]
-        p._animation_frame += 1
-        footer.append(frame + " RUNNING", style="bold green")
+        footer.append("▶ RUNNING", style="bold green")
     footer.append("  ")
     for label, count in status_counts.items():
         footer.append(f"{count} {label}  ", style="dim")
@@ -186,36 +160,27 @@ def render_task_list(p: "Pipeline") -> Panel:
     footer.append(" detail  ", style="dim")
     footer.append("Esc", style="bold cyan")
     footer.append(" back  ", style="dim")
-    footer.append("F", style="bold cyan")
-    footer.append(" filter  ", style="dim")
-    footer.append("Tab", style="bold cyan")
-    footer.append(" cycle view  ", style="dim")
-    if not p._pipeline_done:
+    if not tui.pipeline_done:
         footer.append("P", style="bold cyan")
         footer.append("/", style="dim")
         footer.append("R", style="bold cyan")
         footer.append(" pause/resume  ", style="dim")
     footer.append("Q", style="bold cyan")
     footer.append(" quit", style="dim")
-    
-    # Show view mode on the same line
-    view_modes = ["All tasks", "Pending", "Running", "Failed", "Finished"]
-    view_text = view_modes[p._view_mode_idx]
-    view_style = "bold cyan" if p._view_mode_idx != 0 else "dim"
-    footer.append("  |  ")
-    footer.append(view_text, style=view_style)
-    
-    if p.last_command_message and not p._quit_confirmation_pending:
+
+    if tui.last_command_message and not tui.quit_confirmation_pending:
         from rich.text import Text as RichText
-        msg = RichText.from_markup(p.last_command_message) if '[' in p.last_command_message else RichText(p.last_command_message, style="italic dim cyan")
+        msg = (RichText.from_markup(tui.last_command_message)
+               if '[' in tui.last_command_message
+               else RichText(tui.last_command_message, style="italic dim cyan"))
         footer.append("\n")
         footer.append(msg)
-    elif p._filter_string:
-        pass  # Filter already shown above
 
     done_tag = ""
-    if p._pipeline_done:
-        done_tag = "  [bold red]FAILED[/bold red]" if p._pipeline_failed else "  [bold green]DONE[/bold green]"
+    if tui.pipeline_done:
+        done_tag = ("  [bold red]FAILED[/bold red]"
+                    if tui.pipeline_failed else
+                    "  [bold green]DONE[/bold green]")
 
     group_parts = []
     if above:
@@ -223,19 +188,11 @@ def render_task_list(p: "Pipeline") -> Panel:
     group_parts.append(table)
     if below:
         group_parts.append(Text(f"  ▼ {below} more", style="dim"))
-    
-    # Show filter input if in filter mode
-    if p._filter_mode:
-        from rich.text import Text as RichText
-        filter_input = RichText(f"Filter: {p._filter_string}_", style="bold yellow")
-        group_parts.append(Rule(style="bright_black"))
-        group_parts.append(filter_input)
-    
     group_parts.extend([Rule(style="bright_black"), footer])
 
-    if p.last_command_message and p._quit_confirmation_pending:
+    if tui.last_command_message and tui.quit_confirmation_pending:
         from rich.text import Text as RichText
-        msg = RichText.from_markup(p.last_command_message)
+        msg = RichText.from_markup(tui.last_command_message)
         msg_panel = Panel(msg, border_style="bold red", padding=(0, 2))
         group_parts.append(msg_panel)
 
@@ -248,7 +205,8 @@ def render_task_list(p: "Pipeline") -> Panel:
 
 
 def render_task_detail(p: "Pipeline") -> Panel:
-    task = p.tasks[p._selected_task_idx]
+    tui = p.tui
+    task = p.tasks[tui.selected_task_idx]
     s, stext, _, _ = task.status
     sym, style = _STATUS_DISPLAY.get(s, ("?", "dim"))
 
@@ -267,18 +225,72 @@ def render_task_detail(p: "Pipeline") -> Panel:
         (duration, "dim"),
     )
 
-    stdout_content = task.get_stdout()
-    stdout_body = Text(stdout_content) if stdout_content else Text("(no output)", style="dim")
-    stdout_panel = Panel(stdout_body, title="stdout", border_style="dim", padding=(0, 1))
-
-    parts = [header, Rule(style="bright_black"), stdout_panel]
-
+    try:
+        term_height = shutil.get_terminal_size().lines
+    except Exception:
+        term_height = 24
     stderr_content = task.get_stderr()
+    stderr_overhead = 6 if stderr_content else 0
+    max_stdout_lines = max(5, term_height - 9 - stderr_overhead)
+
+    has_tail = hasattr(task.stdout, "get_tail")
+    if has_tail:
+        stdout_content = task.stdout.get_tail(max_stdout_lines)
+        total_lines = task.stdout.line_count
+        truncated = task.stdout.truncated_lines
+    else:
+        raw = task.get_stdout() or ""
+        lines = raw.split("\n")
+        total_lines = len(lines)
+        truncated = 0
+        stdout_content = "\n".join(lines[-max_stdout_lines:])
+
+    if stdout_content:
+        shown_lines = stdout_content.count("\n") + 1
+        stdout_body = Text(stdout_content)
+    else:
+        shown_lines = 0
+        stdout_body = Text("(no output)", style="dim")
+
+    hidden = total_lines - shown_lines + truncated
+    subtitle = (f"[dim]{hidden:,} earlier lines hidden · showing last {shown_lines}[/dim]"
+                if hidden > 0 else None)
+
+    stdout_panel = Panel(
+        stdout_body, title="stdout", subtitle=subtitle,
+        border_style="dim", padding=(0, 1),
+    )
+
+    parts = [header, Rule(style="bright_black")]
+
+    if task.progress is not None:
+        snap = task.progress.snapshot()
+        phase_prefix = f"[{snap['phase']}]  " if snap["phase"] else ""
+        msg_line = f"{phase_prefix}{snap['message']}"
+        if snap["total"]:
+            frac = min(1.0, snap["current"] / snap["total"])
+            bar_width = 40
+            filled = round(frac * bar_width)
+            bar = "█" * filled + "░" * (bar_width - filled)
+            pct_text = f"{snap['current']:,} / {snap['total']:,}  ({frac * 100:.1f}%)"
+            progress_body = Text.assemble(
+                (bar, "bold green"), ("  ", ""), (pct_text, "dim"), ("\n", ""),
+                (msg_line, "italic dim"),
+            )
+        else:
+            progress_body = Text(msg_line or "running…", style="dim")
+        parts.append(Panel(progress_body, title="progress",
+                           border_style="green dim", padding=(0, 1)))
+
+    parts.append(stdout_panel)
+
     if stderr_content:
-        parts.append(Panel(Text(stderr_content), title="stderr", border_style="red dim", padding=(0, 1)))
+        stderr_lines = stderr_content.split("\n")
+        stderr_tail = "\n".join(stderr_lines[-max(5, stderr_overhead - 2):])
+        parts.append(Panel(Text(stderr_tail), title="stderr", border_style="red dim", padding=(0, 1)))
 
     n = len(p.tasks)
-    pos = (p._selected_task_idx or 0) + 1
+    pos = (tui.selected_task_idx or 0) + 1
     footer = Text.assemble(
         ("↑↓", "bold cyan"), (f"  prev/next task ({pos}/{n})  ", "dim"),
         ("Esc", "bold cyan"), ("  back to overview", "dim"),

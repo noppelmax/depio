@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from dataclasses import dataclass, field
 from pathlib import Path
 import typing
 import time
@@ -12,11 +13,35 @@ import sys
 from .BuildMode import BuildMode
 from .config import get_config
 from .TaskStatus import TaskStatus, TERMINAL_STATES, SUCCESSFUL_TERMINAL_STATES, FAILED_TERMINAL_STATES
-from .stdio_helpers import redirect, stop_redirect
+from .stdio_helpers import redirect, stop_redirect, TaskOutputBuffer
+from .progress import TaskProgress, _register_progress, _unregister_progress
 from .code_hash import has_code_changed, record_hash
 from .exceptions import ProductNotProducedException, TaskRaisedException, UnknownStatusException, \
     ProductNotUpdatedException, \
     DependencyNotMetException
+
+
+@dataclass
+class TaskOptions:
+    """Grouping of optional Task configuration, passed as a single object.
+
+    All fields have defaults so ``TaskOptions()`` is always valid.
+    The ``@task`` decorator builds one of these from its keyword args.
+    Plain ``Task(...)`` calls may still pass these as flat kwargs for
+    backward compatibility — they are absorbed into a ``TaskOptions``
+    automatically.
+    """
+    buildmode: BuildMode = BuildMode.IF_MISSING
+    max_age: Optional[float] = None
+    track_code: bool = False
+    slurm_parameters: dict = field(default_factory=dict)
+    arg_resolver: Optional[Callable] = None
+    description: str = ""
+    on_finished: Optional[Callable] = None
+    on_task_failed: Optional[Callable] = None
+
+
+_OPTION_FIELDS = frozenset(TaskOptions.__dataclass_fields__)
 
 
 class Product():
@@ -137,22 +162,35 @@ def _get_not_updated_products(product_timestamps_after_running: typing.Dict,
 
 
 class Task:
-    def __init__(self, name: str, func: Callable, func_args: List = None, func_kwargs: List = None,
-                 produces: List[Path] = None, depends_on: List[Union[Path, Task]] = None,
-                 buildmode: BuildMode = BuildMode.IF_MISSING,
-                 max_age: float = None,
-                 track_code: bool = False,
-                 slurm_parameters: Dict = None,
-                 arg_resolver: Callable = None,
-                 description: str = None,
-                 on_finished: Callable = None,
-                 on_task_failed: Callable = None):
+    def __init__(
+        self,
+        name: str,
+        func: Callable,
+        func_args: List = None,
+        func_kwargs: Dict = None,
+        produces: List[Path] = None,
+        depends_on: List[Union[Path, "Task"]] = None,
+        options: Optional[TaskOptions] = None,
+        **legacy_kwargs,
+    ):
+        # Absorb old-style flat kwargs (buildmode=, description=, …) into a TaskOptions
+        # so callers that pre-date TaskOptions continue to work unchanged.
+        if options is None:
+            options = TaskOptions()
+        for k in list(legacy_kwargs):
+            if k in _OPTION_FIELDS:
+                setattr(options, k, legacy_kwargs.pop(k))
+        if legacy_kwargs:
+            raise TypeError(f"Task() got unexpected keyword arguments: {list(legacy_kwargs)}")
+
+        # Apply IF_OLD default max_age from config when caller didn't supply one.
+        if options.max_age is None and options.buildmode == BuildMode.IF_OLD:
+            options.max_age = get_config()["task"]["max_age_seconds"]
 
         self.end_time = None
         self.start_time = None
-        self.description = description or ""
-        produces: List[Path] = produces or []
-        depends_on: List[Union[Path, Task]] = depends_on or []
+        produces = produces or []
+        depends_on = depends_on or []
 
         self._status: TaskStatus = TaskStatus.WAITING
         self.name: str = name
@@ -161,24 +199,28 @@ class Task:
         self.func: Callable = func
         self.func_args: List = func_args or []
         self.func_kwargs: Dict = func_kwargs or {}
-        self.buildmode: BuildMode = buildmode
-        self.max_age: float = max_age  # seconds; used by IF_OLD mode
-        if self.max_age is None and buildmode == BuildMode.IF_OLD:
-            self.max_age = get_config()["task"]["max_age_seconds"]
-        self.track_code: bool = track_code
-        self._code_hash_key: str = f"{func.__module__}.{func.__qualname__}"
-        self._decided_to_run: bool = False  # set True the first time should_run() → True
-        self.slurm_parameters: Dict = slurm_parameters or {}
 
-        self.stdout: StringIO = StringIO()
-        self.stderr: StringIO = StringIO()
+        # Unpack TaskOptions to direct attributes so external code that reads
+        # task.buildmode, task.description etc. continues to work.
+        self.buildmode: BuildMode = options.buildmode
+        self.max_age: Optional[float] = options.max_age
+        self.track_code: bool = options.track_code
+        self.slurm_parameters: Dict = options.slurm_parameters
+        self.description: str = options.description
+        self.on_finished: Optional[Callable] = options.on_finished
+        self.on_task_failed: Optional[Callable] = options.on_task_failed
+
+        self._code_hash_key: str = f"{func.__module__}.{func.__qualname__}"
+        self._decided_to_run: bool = False
+
+        self.stdout: TaskOutputBuffer = TaskOutputBuffer()
+        self.stderr: TaskOutputBuffer = TaskOutputBuffer()
+        self.progress: Optional[TaskProgress] = None
         self._slurmid = None
         self._slurmstate: str = ""
 
-        # Allow the task to specify an argument resolver. This can be used to load default values dynamically.
-        # And in particular, before the DAG is constructed.
-        if arg_resolver is not None:
-            self.func_args, self.func_kwargs = arg_resolver(self.func, self.func_args, self.func_kwargs)
+        if options.arg_resolver is not None:
+            self.func_args, self.func_kwargs = options.arg_resolver(self.func, self.func_args, self.func_kwargs)
 
         args_dict_flat: Dict[str, typing.Any] = _get_args_dict(func, self.func_args, self.func_kwargs)
 
@@ -200,8 +242,6 @@ class Task:
         self.task_dependencies = None
 
         self.dependent_tasks = []
-        self.on_finished: Callable = on_finished
-        self.on_task_failed: Callable = on_task_failed
 
     def is_ready_for_execution(self) -> bool:
         if not self.should_run():
@@ -315,24 +355,27 @@ class Task:
 
     def run(self):
         self.start_time = time.time()
+        _register_progress(self.progress)
         redirect(self.stdout)
 
-        # Check if all path dependencies are met
-        self._check_path_dependencies()
-
-        # Store the last-modification timestamp of the already existing products.
-        product_timestamps_before_running: Dict[str, float] = self._get_timestamp_of_products()
-
-        # Call the actual function
-        self._status = TaskStatus.RUNNING
-
         try:
-            self.func(*self.func_args, **self.func_kwargs)
-        except Exception as e:
-            self.set_to_failed()
-            raise TaskRaisedException(e) from e
+            # Check if all path dependencies are met
+            self._check_path_dependencies()
+
+            # Store the last-modification timestamp of the already existing products.
+            product_timestamps_before_running: Dict[str, float] = self._get_timestamp_of_products()
+
+            # Call the actual function
+            self._status = TaskStatus.RUNNING
+
+            try:
+                self.func(*self.func_args, **self.func_kwargs)
+            except Exception as e:
+                self.set_to_failed()
+                raise TaskRaisedException(e) from e
         finally:
             stop_redirect()
+            _unregister_progress()
 
         # Check if any product does not exist.
         self._check_existence_of_products()
@@ -509,4 +552,4 @@ class Task:
     
 
 
-__all__ = ["Task", "Product", "Dependency", "IgnoredForEq", "_get_not_updated_products"]
+__all__ = ["Task", "TaskOptions", "Product", "Dependency", "IgnoredForEq", "_get_not_updated_products"]

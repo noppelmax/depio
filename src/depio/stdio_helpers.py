@@ -11,6 +11,7 @@
 # I guess that means the result is CC-by-SA
 
 
+import re
 import threading
 import sys
 from io import StringIO
@@ -170,9 +171,130 @@ class LocalProxy:
     __deepcopy__ = lambda x, memo: copy.deepcopy(x._get_current_object(), memo)
 
 
-def redirect(stringio: StringIO) -> None:
+_ANSI_CSI_RE = re.compile(r"\x1b\[([0-9;]*)([A-Za-z])")
+
+
+class TaskOutputBuffer:
+    """Write buffer that emulates basic terminal control sequences.
+
+    Handles ``\\r`` (carriage return), ``\\n`` (newline), and common ANSI
+    CSI escape sequences so that output from tqdm, Rich progress bars,
+    and similar libraries is collapsed correctly instead of ballooning
+    the buffer.
+
+    Supported ANSI sequences:
+
+    * ``\\x1b[<n>A`` — cursor up *n* lines (default 1)
+    * ``\\x1b[K`` / ``\\x1b[0K`` — erase to end of line
+    * ``\\x1b[2K`` — erase entire line
+    * All other CSI sequences are silently stripped.
+
+    The buffer caps retained lines to *maxlines* (default 5 000).
     """
-    Redirects the current thread's stdout/stderr to the given StringIO buffer.
+
+    def __init__(self, maxlines: int = 5_000):
+        self._lines: list[str] = [""]
+        self._cursor: int = 0  # index into self._lines for current line
+        self._maxlines = maxlines
+        self._lock = threading.Lock()
+        self._truncated: int = 0  # how many lines were dropped
+
+    # -- file-like interface (write / flush / getvalue) -----------------------
+
+    def write(self, text: str) -> int:
+        if not text:
+            return 0
+        with self._lock:
+            self._write_locked(text)
+        return len(text)
+
+    def _write_locked(self, text: str) -> None:
+        # Strip ANSI CSI sequences, but handle cursor-up and erase-line
+        # by processing them as control operations.
+        pos = 0
+        for m in _ANSI_CSI_RE.finditer(text):
+            # Write any text before this escape
+            chunk = text[pos:m.start()]
+            if chunk:
+                self._write_plain(chunk)
+            pos = m.end()
+
+            param_str, cmd = m.group(1), m.group(2)
+            n = int(param_str) if param_str else 1
+
+            if cmd == "A":
+                # Cursor up
+                self._cursor = max(0, self._cursor - n)
+            elif cmd == "K":
+                # Erase in line: 0/default = to end, 2 = whole line
+                if param_str in ("", "0"):
+                    pass  # we don't track column position; no-op is safe
+                elif param_str == "2":
+                    self._lines[self._cursor] = ""
+            # All other CSI sequences are silently dropped.
+
+        # Write remaining text after last escape
+        tail = text[pos:]
+        if tail:
+            self._write_plain(tail)
+
+        # Enforce cap
+        excess = len(self._lines) - self._maxlines
+        if excess > 0:
+            del self._lines[:excess]
+            self._cursor -= excess
+            if self._cursor < 0:
+                self._cursor = 0
+            self._truncated += excess
+
+    def _write_plain(self, text: str) -> None:
+        """Process plain text (no ANSI escapes) with \\n and \\r handling."""
+        for ch in text:
+            if ch == "\n":
+                # Move cursor to next line; add a new line if at the end.
+                self._cursor += 1
+                if self._cursor >= len(self._lines):
+                    self._lines.append("")
+            elif ch == "\r":
+                self._lines[self._cursor] = ""
+            else:
+                self._lines[self._cursor] += ch
+
+    def flush(self) -> None:
+        pass  # no-op; kept for file-like interface
+
+    @property
+    def encoding(self) -> str:
+        return "utf-8"
+
+    def isatty(self) -> bool:
+        return False
+
+    # -- reading interface ----------------------------------------------------
+
+    def getvalue(self) -> str:
+        """Return the full buffered output as a single string."""
+        with self._lock:
+            return "\n".join(self._lines)
+
+    def get_tail(self, n: int) -> str:
+        """Return the last *n* lines, joined by newlines."""
+        with self._lock:
+            return "\n".join(self._lines[-n:])
+
+    @property
+    def line_count(self) -> int:
+        with self._lock:
+            return len(self._lines)
+
+    @property
+    def truncated_lines(self) -> int:
+        return self._truncated
+
+
+def redirect(stringio: "StringIO | TaskOutputBuffer") -> None:
+    """
+    Redirects the current thread's stdout/stderr to the given buffer.
     """
     ident = threading.current_thread().ident
     with _thread_proxies_lock:
@@ -185,9 +307,7 @@ def stop_redirect() -> None:
     """
     ident = threading.current_thread().ident
     with _thread_proxies_lock:
-        if ident not in thread_proxies:
-            return
-        del thread_proxies[ident]
+        thread_proxies.pop(ident, None)
 
 
 def _get_stream(original):
@@ -201,20 +321,9 @@ def _get_stream(original):
     """
 
     def proxy():
-        """
-        Returns the original stream if the current thread is not proxied,
-        otherwise we return the proxied item.
-
-        :return: The stream object for the current thread.
-        :rtype: ``file``
-        """
-        # Get the current thread's identity.
         ident = threading.current_thread().ident
-
-        # Return the proxy, otherwise return the original.
         return thread_proxies.get(ident, original)
 
-    # Return the inner function.
     return proxy
 
 
@@ -240,4 +349,4 @@ def disable_proxy():
     sys.stderr = orig_stderr
 
 
-__all__ = [redirect, stop_redirect, enable_proxy, disable_proxy]
+__all__ = [redirect, stop_redirect, enable_proxy, disable_proxy, TaskOutputBuffer]

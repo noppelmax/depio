@@ -267,6 +267,46 @@ In addition, there are flags you can pass to the pipeline:
 - `refreshrate` : `float` — Polling interval in seconds. Can also be set in `.depio/config.json`.
 - `quiet` : `bool` — Disable the TUI entirely; useful for scripted or CI runs.
 
+## Per-task progress
+
+Tasks can report structured progress that depio displays in the TUI. Call `depio.current_progress()` from inside a running task to get the `TaskProgress` object bound to that thread.
+
+```python
+import depio
+from depio.decorators import task
+from typing import Annotated
+import pathlib
+from depio.Task import Product
+
+@task("mypipeline")
+def train(output: Annotated[pathlib.Path, Product], epochs: int = 10):
+    prog = depio.current_progress()
+    prog.update(total=epochs, phase="training")
+
+    for epoch in range(epochs):
+        # ... do work ...
+        prog.advance()                           # increment by 1
+        prog.update(message=f"loss {loss:.4f}") # optional status text
+```
+
+`TaskProgress` fields (all optional):
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `current` | `int` | Steps completed so far |
+| `total` | `int \| None` | Total steps (enables `fraction` property) |
+| `message` | `str` | Free-form status text (e.g. a metric) |
+| `phase` | `str` | Current phase label (e.g. `"warmup"`, `"eval"`) |
+
+Key methods:
+
+- `prog.update(current=…, total=…, message=…, phase=…)` — atomically set any subset of fields
+- `prog.advance(n=1)` — increment `current` by `n`
+- `prog.snapshot()` — return a consistent `dict` copy of all fields
+- `prog.fraction` — `float` 0–1 if `total` is set, else `None`
+
+`current_progress()` returns `None` when called outside a running task, so callers that may be used both inside and outside a pipeline can guard with `if prog := depio.current_progress()`.
+
 ## Hooks
 depio supports callbacks that fire when a task or the whole pipeline finishes:
 
@@ -340,5 +380,3 @@ See [LICENCE](LICENSE).
 
 ## Security
 See [SECURITY](SECURITY.md).
-
-

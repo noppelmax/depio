@@ -42,7 +42,6 @@ Each task added during a variant's ``build_pipeline`` call is tagged with
 a human-readable label derived from the overrides.  The label is stored in
 ``task.description`` and shown in the depio TUI as a "Variant" column.
 """
-from __future__ import annotations
 
 from pathlib import Path
 from typing import Callable, List, Optional, TYPE_CHECKING

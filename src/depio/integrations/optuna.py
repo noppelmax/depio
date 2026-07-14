@@ -33,7 +33,6 @@ SLURM / batch usage::
                      executor=executor,
                      batch_size=20)   # 10 SLURM batches of 20 trials each
 """
-from __future__ import annotations
 
 import math
 from typing import Callable, Optional, TYPE_CHECKING
