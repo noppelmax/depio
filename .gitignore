@@ -8,3 +8,5 @@ build
 multirun
 outputs
 slurm
+.vscode
+.claude
