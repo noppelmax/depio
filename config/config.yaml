@@ -6,7 +6,6 @@ targetlabel: 0
 bld_path:       "build"
 data_path:      "data"
 
-
 cifar10_path:   "${data_path}/results"
 resultspath:    "${bld_path}/results"
 
